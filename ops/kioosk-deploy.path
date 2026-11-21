@@ -1,0 +1,7 @@
+[Unit]
+Description=Watch for signed Kioosk deployment requests
+[Path]
+PathChanged=/srv/kioosk/shared/triggers/deploy
+Unit=kioosk-deploy.service
+[Install]
+WantedBy=multi-user.target

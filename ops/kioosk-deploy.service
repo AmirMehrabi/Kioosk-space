@@ -1,0 +1,7 @@
+[Unit]
+Description=Build and atomically publish Kioosk from GitHub main
+[Service]
+Type=oneshot
+User=ubuntu
+Group=www-data
+ExecStart=/bin/bash /srv/kioosk/shared/deploy.sh
