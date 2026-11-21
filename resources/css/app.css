@@ -121,14 +121,15 @@ h1 { font-size: clamp(26px, 3.8vw, 40px); line-height: 1.22; font-weight: 850; m
 .eyebrow { display: flex; align-items: center; gap: 7px; color: #124479; margin: 0 0 8px; font-weight: 750; font-size: 13px; }
 .eyebrow span, .unread-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--blue); }
 .intro-description { color: var(--muted); margin: 7px 0 0; }
-.mail-placeholder, .composer-region { position: relative; }
-.mail-placeholder { min-height: 96px; }
+.mail-placeholder, .composer-region, .mail-section-content { position: relative; }
+.mail-placeholder, .mail-section-content { min-height: 96px; }
 .mail-loading { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
 .mail-spinner {
-    width: 29px; height: 29px; border: 2px solid #dce4ef; border-inline-start-color: var(--blue);
-    border-radius: 50%; animation: mail-spin .82s linear infinite;
+    width: 29px; height: 29px; border: 2px solid #dce4ef;
+    border-top-color: var(--blue); border-right-color: #78a8ec;
+    border-radius: 50%; animation: mail-spin .7s linear infinite;
 }
-@keyframes mail-spin { to { transform: rotate(1turn); } }
+@keyframes mail-spin { from { transform: rotate(0); } to { transform: rotate(1turn); } }
 @media (prefers-reduced-motion: reduce) { .mail-spinner { animation: none; } }
 .inbox-empty { display: grid; place-items: center; min-height: inherit; margin: 0; color: var(--muted); text-align: center; }
 .composer-loading { visibility: hidden; }

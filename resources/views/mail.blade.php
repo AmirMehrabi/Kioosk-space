@@ -99,19 +99,19 @@
                     <template x-for="group in groups" :key="group.key">
                         <section class="message-group" :aria-label="group.label">
                             <div class="group-title"><h2 x-text="group.label"></h2><span x-show="group.messages.length" x-text="number(group.messages.length)"></span></div>
-                            <div class="message-list" x-show="group.messages.length">
-                                <template x-for="message in group.messages" :key="message.id">
-                                    <button type="button" class="message-row" :data-message="message.id" :class="{unread: !message.read}" @click="openMessage(message)">
-                                        <span class="avatar" :class="message.color" x-text="message.initial"></span>
-                                        <span class="sender" x-text="message.sender"></span>
-                                        <span class="message-copy"><strong x-text="message.subject"></strong><span x-text="message.body"></span></span>
-                                        <time x-text="message.time"></time><i class="unread-dot" :class="{seen: message.read}" aria-hidden="true"></i><span class="sr-only" x-show="!message.read">خوانده‌نشده</span>
-                                    </button>
-                                </template>
-                            </div>
-                            <div class="mail-placeholder" x-show="group.key !== 'all' && !group.messages.length">
-                                <x-mail-spinner x-show="loading && !pages[group.key] && group.key === 'unread'" />
-                                <p class="inbox-empty" x-show="!loadError && (!loading || pages[group.key])"
+                            <div class="mail-section-content">
+                                <x-mail-spinner x-show="loading && !pages[group.key]" />
+                                <div class="message-list" x-show="group.messages.length">
+                                    <template x-for="message in group.messages" :key="message.id">
+                                        <button type="button" class="message-row" :data-message="message.id" :class="{unread: !message.read}" @click="openMessage(message)">
+                                            <span class="avatar" :class="message.color" x-text="message.initial"></span>
+                                            <span class="sender" x-text="message.sender"></span>
+                                            <span class="message-copy"><strong x-text="message.subject"></strong><span x-text="message.body"></span></span>
+                                            <time x-text="message.time"></time><i class="unread-dot" :class="{seen: message.read}" aria-hidden="true"></i><span class="sr-only" x-show="!message.read">خوانده‌نشده</span>
+                                        </button>
+                                    </template>
+                                </div>
+                                <p class="inbox-empty" x-show="group.key !== 'all' && !group.messages.length && !loadError && (!loading || pages[group.key])"
                                     x-text="group.key === 'unread' ? 'نامه‌ی جدیدی ندارید' : 'هنوز نامه‌ای ندیده‌اید.'"></p>
                             </div>
                             <button class="secondary group-more" type="button" x-show="pages[group.key]?.more && !loadError"

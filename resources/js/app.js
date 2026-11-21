@@ -30,6 +30,8 @@ const emptyDraft = () => ({ to: '', subject: '', body: '' });
 const number = new Intl.NumberFormat('fa-IR');
 const time = new Intl.DateTimeFormat('fa-IR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
+const spinnerVisible = () => new Promise(resolve => setTimeout(resolve, 450));
+
 async function mailRequest(path, method = 'GET', payload) {
     const response = await fetch('/mail/' + path, {
         method,
@@ -115,6 +117,7 @@ Alpine.data('mailbox', () => ({
     },
     async load(append = false, section = 'all') {
         const version = ++this.loadVersion;
+        const minimumDisplay = !append && !Object.keys(this.pages).length ? spinnerVisible() : null;
         this.loading = true;
         if (!append) this.loadError = '';
         try {
@@ -132,10 +135,13 @@ Alpine.data('mailbox', () => ({
                 pages[key] = {more: data.more, position: position + data.messages.length};
                 if (this.compose) this.draft = {...emptyDraft(), ...data.draft};
             }
+            if (minimumDisplay) await minimumDisplay;
+            if (version !== this.loadVersion) return false;
             this.messages = [...new Map(messages.map(row => [row.id, row])).values()];
             this.pages = pages;
             return true;
         } catch (error) {
+            if (minimumDisplay) await minimumDisplay;
             if (version === this.loadVersion) this.loadError = error.message;
             return false;
         } finally {
@@ -209,13 +215,15 @@ Alpine.data('mailbox', () => ({
     },
     async openMessage(message) {
         this.selected = {...message, loading: true};
+        const minimumDisplay = spinnerVisible();
         this.$nextTick(() => document.getElementById('message-heading')?.focus());
         try {
-            const detail = await mailRequest('message/' + encodeURIComponent(message.id));
+            const [detail] = await Promise.all([mailRequest('message/' + encodeURIComponent(message.id)), minimumDisplay]);
             if (this.selected?.id !== message.id) return;
             this.selected = {...message, ...detail, folder: message.folder, sender: message.sender, email: message.email, body: detail.text};
             if (!message.read) await this.setFlag('read', true);
         } catch (error) {
+            await minimumDisplay;
             if (this.selected?.id === message.id) this.selected.loading = false;
             this.notify(error.message);
         }
