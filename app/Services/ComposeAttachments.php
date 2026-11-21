@@ -54,7 +54,7 @@ class ComposeAttachments
         $files = $this->metadata($user, $ids);
         $base = rtrim(config('stalwart.url'), '/');
         $http = Http::withBasicAuth($user->mailbox_address, $user->mail_secret)->withoutRedirecting()->timeout(20);
-        $session = $http->get($base.'/.well-known/jmap');
+        $session = $http->get($base.'/jmap/session');
         $template = $session->json('uploadUrl');
         abort_unless($session->successful() && is_string($template) && str_starts_with($template, $base.'/'), 502, 'نشانی بارگذاری پیوست در دسترس نیست.');
         $url = str_replace('{accountId}', rawurlencode($user->mail_account_id), $template);

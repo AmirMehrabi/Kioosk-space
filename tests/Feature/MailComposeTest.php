@@ -43,7 +43,7 @@ class MailComposeTest extends TestCase
         $this->assertSame($draft['bcc'], $owner->fresh()->mail_draft['bcc']);
 
         Http::fake(function (Request $request) {
-            if (str_ends_with($request->url(), '/.well-known/jmap')) {
+            if (str_ends_with($request->url(), '/jmap/session')) {
                 return Http::response(['uploadUrl' => 'https://stalwart.example.test/jmap/upload/{accountId}']);
             }
             if (str_contains($request->url(), '/jmap/upload/')) {
