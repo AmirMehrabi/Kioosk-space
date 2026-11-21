@@ -176,9 +176,14 @@
                             </template>
                         </div>
                     </article>
-                    <a class="reply-tile" :href="composeUrl + '?reply=' + encodeURIComponent(selected.id)">
-                        <span x-html="icons.reply"></span> پاسخ دادن
-                    </a>
+                    <div class="thread-replies">
+                        <a class="reply-tile" :href="composeUrl + '?reply=' + encodeURIComponent(selected.id)">
+                            <span x-html="icons.reply"></span> پاسخ دادن
+                        </a>
+                        <a class="reply-tile" x-show="selected.replyAll?.length > 1" :href="composeUrl + '?reply=' + encodeURIComponent(selected.id) + '&amp;all=1'">
+                            <span x-html="icons.reply"></span> پاسخ به همه
+                        </a>
+                    </div>
                 </section>
             </template>
 
@@ -188,17 +193,85 @@
                     <div class="composer-region">
                         <x-mail-spinner x-show="loading" />
                         <form class="paper composer" :inert="loading || Boolean(loadError)" :class="{'composer-loading': loading}" @submit.prevent="send">
-                            <label class="field"><span>گیرنده</span><input type="email" required dir="ltr" placeholder="name@example.com" x-model="draft.to" @input="saveDraft"></label>
-                            <label class="field"><span>موضوع</span><input required dir="auto" placeholder="موضوع نامه" x-model="draft.subject" @input="saveDraft"></label>
-                            <textarea required dir="auto" aria-label="متن نامه" placeholder="متن نامه را اینجا بنویسید…" x-model="draft.body" @input="saveDraft"></textarea>
-                            <div class="compose-footer">
-                                <div class="actions">
-                                    <button class="primary" type="submit" :disabled="busy"><span x-html="icons.send"></span><span x-text="busy ? 'در حال ارسال…' : 'ارسال نامه'"></span></button>
-                                    <button class="secondary discard" type="button" @click="discardDraft" x-show="draft.to || draft.subject || draft.body">پاک کردن پیش‌نویس</button>
+                            <fieldset :disabled="busy">
+                                @foreach (['to' => 'گیرنده', 'cc' => 'رونوشت', 'bcc' => 'رونوشت پنهان'] as $field => $label)
+                                    <div class="field recipient-field" x-show="{{ $field === 'to' ? 'true' : $field.'Open' }}">
+                                        <label for="recipient-{{ $field }}">{{ $label }}</label>
+                                        <div class="recipient-control">
+                                            <div class="recipient-chips" dir="ltr">
+                                                <template x-for="address in draft.{{ $field }}" :key="address">
+                                                    <span class="recipient-chip">
+                                                        <bdi x-text="address"></bdi>
+                                                        <button type="button" :aria-label="'حذف ' + address" @click="removeRecipient('{{ $field }}', address)">×</button>
+                                                    </span>
+                                                </template>
+                                                <input id="recipient-{{ $field }}" @if ($field === 'to') x-ref="recipientTo" @endif
+                                                    type="text" inputmode="email" autocomplete="off" spellcheck="false"
+                                                    placeholder="name@example.com" x-model="recipientInputs.{{ $field }}"
+                                                    :aria-invalid="Boolean(recipientErrors.{{ $field }})"
+                                                    aria-describedby="recipient-error-{{ $field }}"
+                                                    @keydown.enter.prevent="commitRecipients('{{ $field }}')"
+                                                    @keydown.comma.prevent="commitRecipients('{{ $field }}')"
+                                                    @paste="pasteRecipients('{{ $field }}', $event)"
+                                                    @blur="commitRecipients('{{ $field }}')">
+                                            </div>
+                                            <small id="recipient-error-{{ $field }}" class="recipient-error" x-show="recipientErrors.{{ $field }}" role="alert" x-text="recipientErrors.{{ $field }}"></small>
+                                        </div>
+                                        @if ($field === 'to')
+                                            <div class="recipient-options">
+                                                <button type="button" x-show="!ccOpen" @click="ccOpen = true; $nextTick(() => document.getElementById('recipient-cc').focus())">رونوشت</button>
+                                                <button type="button" x-show="!bccOpen" @click="bccOpen = true; $nextTick(() => document.getElementById('recipient-bcc').focus())">رونوشت پنهان</button>
+                                            </div>
+                                        @endif
+                                    </div>
+                                @endforeach
+                                <label class="field"><span>موضوع</span><input required dir="auto" maxlength="300" placeholder="موضوع نامه" x-model="draft.subject" @input="saveDraft"></label>
+                                <div class="format-toolbar" role="group" aria-label="قالب‌بندی نامه">
+                                    <button type="button" aria-label="پررنگ" @click="format('bold')"><strong>B</strong></button>
+                                    <button type="button" aria-label="مورب" @click="format('italic')"><em>I</em></button>
+                                    <button type="button" @click="format('link')">پیوند</button>
+                                    <button type="button" @click="format('list')">فهرست</button>
+                                    <button type="button" @click="format('quote')">نقل‌قول</button>
+                                    <button type="button" class="format-preview" :aria-pressed="previewOpen" @click="togglePreview" x-text="previewOpen ? 'بازگشت به ویرایش' : 'پیش‌نمایش'"></button>
                                 </div>
-                                <small x-show="draft.to || draft.subject || draft.body">پیش‌نویس در صندوق شما ذخیره می‌شود</small>
-                            </div>
+                                <textarea x-ref="editor" dir="auto" aria-label="متن نامه" placeholder="متن نامه را اینجا بنویسید…" x-show="!previewOpen" x-model="draft.body" @input="saveDraft"></textarea>
+                                <div class="compose-preview message-rich" dir="auto" x-show="previewOpen" x-html="previewHtml"></div>
+                                <div class="compose-attachments" @dragover.prevent @drop.prevent="addFiles($event.dataTransfer.files)">
+                                    <div class="attachments-toolbar">
+                                        <input type="file" multiple x-ref="filePicker" hidden @change="addFiles($event.target.files); $event.target.value = ''">
+                                        <button class="secondary" type="button" :disabled="Boolean(uploading)" @click="$refs.filePicker.click()">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m8 13 6-6a2 2 0 0 1 3 3l-8 8a4 4 0 0 1-6-6L12 3a6 6 0 0 1 8 8l-9 9"/></svg>
+                                            افزودن پیوست
+                                        </button>
+                                        <small>فایل‌ها را اینجا رها کنید. هر فایل تا ۸ مگابایت.</small>
+                                    </div>
+                                    <template x-for="file in draft.files" :key="file.id">
+                                        <div class="compose-file"><bdi x-text="file.name"></bdi><small x-text="number(Math.ceil(file.size / 1024)) + ' کیلوبایت'"></small>
+                                            <button class="secondary" type="button" :aria-label="'حذف ' + file.name" @click="removeFile(file.id)">حذف</button></div>
+                                    </template>
+                                    <div class="compose-file" x-show="uploading">
+                                        <bdi x-text="uploading?.name"></bdi>
+                                        <progress max="100" :value="uploading?.progress ?? 0" aria-label="پیشرفت بارگذاری"></progress>
+                                        <button class="secondary" type="button" @click="uploadRequest?.abort()">لغو</button>
+                                    </div>
+                                </div>
+                                <div class="compose-footer">
+                                    <div class="actions">
+                                        <button class="primary" type="submit" :disabled="busy || Boolean(uploading)"><span x-html="icons.send"></span><span x-text="busy ? 'در حال ارسال…' : 'ارسال نامه'"></span></button>
+                                        <button class="secondary discard" type="button" @click="$refs.discard.showModal()" x-show="hasDraft" :disabled="Boolean(uploading)">پاک کردن پیش‌نویس</button>
+                                    </div>
+                                    <small role="status" x-text="draftStatus"></small>
+                                </div>
+                            </fieldset>
                         </form>
+                        <dialog class="paper compose-dialog" x-ref="discard" aria-labelledby="discard-heading">
+                            <h2 id="discard-heading">پیش‌نویس پاک شود؟</h2>
+                            <p>متن، گیرنده‌ها و پیوست‌های این پیش‌نویس پاک می‌شوند.</p>
+                            <form method="dialog" class="actions">
+                                <button class="secondary" autofocus>بازگشت</button>
+                                <button class="primary" @click="discardDraft">پاک کردن پیش‌نویس</button>
+                            </form>
+                        </dialog>
                     </div>
                 </section>
             </template>

@@ -26,7 +26,7 @@ const folders = {
     sent: { title: 'ارسال‌شده‌ها', icon: 'send', description: 'نامه‌هایی که در نسخهٔ آزمایشی فرستاده‌اید.' },
 };
 
-const emptyDraft = () => ({ to: '', subject: '', body: '' });
+const emptyDraft = () => ({to: [], cc: [], bcc: [], subject: '', body: '', attachments: [], files: [], reply: null});
 const number = new Intl.NumberFormat('fa-IR');
 const time = new Intl.DateTimeFormat('fa-IR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
@@ -63,6 +63,15 @@ Alpine.data('mailbox', () => ({
     },
     messages: [],
     draft: emptyDraft(),
+    recipientInputs: {to: '', cc: '', bcc: ''},
+    recipientErrors: {},
+    ccOpen: false,
+    bccOpen: false,
+    uploading: null,
+    uploadRequest: null,
+    draftStatus: '',
+    previewHtml: '',
+    previewOpen: false,
     get compose() {
         return this.$root.dataset.composing === 'true';
     },
@@ -85,6 +94,7 @@ Alpine.data('mailbox', () => ({
     draftWrite: Promise.resolve(),
     submission: sessionStorage.getItem('kioosk.submission'),
     reply: new URLSearchParams(location.search).get('reply'),
+    replyAll: new URLSearchParams(location.search).get('all') === '1',
 
     async init() {
         this.syncFolder();
@@ -103,10 +113,12 @@ Alpine.data('mailbox', () => ({
             return;
         }
         if (!await this.load()) return;
-        if (this.reply && !Object.values(this.draft).some(Boolean)) {
+        if (this.reply && !this.hasDraft) {
             try {
                 const original = await mailRequest('message/' + encodeURIComponent(this.reply));
-                this.draft = { to: original.replyTo, subject: 'پاسخ: ' + original.subject, body: '' };
+                const recipients = this.replyAll ? original.replyAll : [original.replyTo].filter(Boolean);
+                this.draft = {...emptyDraft(), to: recipients, subject: 'پاسخ: ' + original.subject, reply: this.reply};
+                this.saveDraft();
             } catch (error) {
                 this.notify(error.message);
             }
@@ -133,7 +145,18 @@ Alpine.data('mailbox', () => ({
 
                 messages.push(...data.messages.map(message => ({...message, time: time.format(new Date(message.receivedAt))})));
                 pages[key] = {more: data.more, position: position + data.messages.length};
-                if (this.compose) this.draft = {...emptyDraft(), ...data.draft};
+                if (this.compose) {
+                this.draft = {...emptyDraft(), ...data.draft};
+                for (const field of ['to', 'cc', 'bcc']) {
+                    this.draft[field] = Array.isArray(this.draft[field]) ? this.draft[field] : [this.draft[field]].filter(Boolean);
+                }
+                this.draft.subject ??= '';
+                this.draft.body ??= '';
+                this.draft.attachments ??= [];
+                this.draft.files ??= [];
+                this.ccOpen = this.draft.cc.length > 0;
+                this.bccOpen = this.draft.bcc.length > 0;
+            }
             }
             if (minimumDisplay) await minimumDisplay;
             if (version !== this.loadVersion) return false;
@@ -261,29 +284,172 @@ Alpine.data('mailbox', () => ({
         clearTimeout(this.noticeTimer);
         this.noticeTimer = setTimeout(() => { this.notice = ''; }, 3200);
     },
+    get hasDraft() {
+        return Boolean(this.draft.to.length || this.draft.cc.length || this.draft.bcc.length ||
+            this.draft.subject || this.draft.body || this.draft.attachments.length);
+    },
+    commitRecipients(field) {
+        const value = this.recipientInputs[field].trim();
+        if (!value) return true;
+
+        const entries = value.split(/[,;،؛\s]+/u).filter(Boolean);
+        const invalid = entries.find(address => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(address) || address.length > 254);
+        if (invalid) {
+            this.recipientErrors[field] = 'نشانی معتبر وارد کنید.';
+            return false;
+        }
+
+        const unique = new Map(this.draft[field].map(address => [address.toLowerCase(), address]));
+        entries.forEach(address => unique.set(address.toLowerCase(), address));
+        this.draft[field] = [...unique.values()];
+        this.recipientInputs[field] = '';
+        delete this.recipientErrors[field];
+        this.saveDraft();
+        return true;
+    },
+    removeRecipient(field, address) {
+        this.draft[field] = this.draft[field].filter(item => item !== address);
+        this.saveDraft();
+    },
+    pasteRecipients(field, event) {
+        const text = event.clipboardData?.getData('text') ?? '';
+        if (!/[,;،؛\s]/u.test(text.trim())) return;
+        event.preventDefault();
+        this.recipientInputs[field] += ' ' + text;
+        this.commitRecipients(field);
+    },
+    format(kind) {
+        const editor = this.$refs.editor;
+        const {selectionStart: start, selectionEnd: end} = editor;
+        const selected = this.draft.body.slice(start, end);
+        const formatted = {
+            bold: () => '**' + (selected || 'متن') + '**',
+            italic: () => '_' + (selected || 'متن') + '_',
+            link: () => '[' + (selected || 'نام پیوند') + '](https://example.com)',
+            list: () => '\n' + (selected || 'مورد').split('\n').map(line => '- ' + line).join('\n') + '\n',
+            quote: () => '\n' + (selected || 'نقل‌قول').split('\n').map(line => '> ' + line).join('\n') + '\n',
+        }[kind]();
+        this.draft.body = this.draft.body.slice(0, start) + formatted + this.draft.body.slice(end);
+        this.$nextTick(() => {
+            editor.focus();
+            editor.setSelectionRange(start, start + formatted.length);
+        });
+        this.saveDraft();
+    },
+    async togglePreview() {
+        if (this.previewOpen) {
+            this.previewOpen = false;
+            return;
+        }
+        try {
+            this.previewHtml = (await mailRequest('draft/preview', 'POST', {body: this.draft.body})).html;
+            this.previewOpen = true;
+        } catch (error) {
+            this.notify(error.message);
+        }
+    },
+    async addFiles(files) {
+        if (this.uploading || this.busy) return;
+        for (const file of files) {
+            if (this.draft.files.length >= 10 || file.size > 8 * 1024 * 1024 ||
+                this.draft.files.reduce((size, item) => size + item.size, 0) + file.size > 16 * 1024 * 1024) {
+                this.notify('هر پیوست حداکثر ۸ مگابایت، مجموع پیوست‌ها حداکثر ۱۶ مگابایت.');
+                return;
+            }
+            this.uploading = {name: file.name, progress: 0};
+            try {
+                const result = await this.uploadFile(file);
+                this.draft.files.push(result);
+                this.draft.attachments.push(result.id);
+                await this.writeDraft();
+            } catch (error) {
+                this.notify(error.message);
+                break;
+            } finally {
+                this.uploading = null;
+                this.uploadRequest = null;
+            }
+        }
+    },
+    uploadFile(file) {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            this.uploadRequest = xhr;
+            const form = new FormData();
+            form.append('file', file);
+            xhr.open('POST', '/mail/draft/attachments');
+            xhr.setRequestHeader('Accept', 'application/json');
+            xhr.setRequestHeader('X-CSRF-TOKEN', document.querySelector('meta[name=csrf-token]').content);
+            xhr.upload.onprogress = event => {
+                if (event.lengthComputable) this.uploading.progress = Math.round(event.loaded / event.total * 100);
+            };
+            xhr.responseType = 'json';
+            xhr.onload = () => xhr.status === 201 ? resolve(xhr.response) :
+                reject(new Error(xhr.response?.errors?.file?.[0] ?? xhr.response?.message ?? 'بارگذاری پیوست انجام نشد.'));
+            xhr.onerror = () => reject(new Error('ارتباط هنگام بارگذاری قطع شد.'));
+            xhr.onabort = () => reject(new Error('بارگذاری لغو شد.'));
+            xhr.send(form);
+        });
+    },
+    async removeFile(id) {
+        this.draft.attachments = this.draft.attachments.filter(item => item !== id);
+        this.draft.files = this.draft.files.filter(file => file.id !== id);
+        await this.writeDraft();
+        await this.deleteUpload(id);
+    },
+    async deleteUpload(id) {
+        try {
+            const response = await fetch('/mail/draft/attachments/' + encodeURIComponent(id), {
+                method: 'DELETE', headers: {'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content},
+            });
+            if (!response.ok) this.notify('پیوست حذف نشد.');
+        } catch {
+            this.notify('پیوست حذف نشد.');
+        }
+    },
     saveDraft() {
         clearTimeout(this.draftTimer);
         this.draftTimer = setTimeout(() => this.writeDraft(), 400);
     },
     writeDraft() {
-        const draft = {...this.draft};
-        this.draftWrite = this.draftWrite.then(() => mailRequest('draft', 'PUT', draft))
-            .catch(error => this.notify(error.message));
+        clearTimeout(this.draftTimer);
+        const {files, ...draft} = this.draft;
+        const snapshot = JSON.parse(JSON.stringify(draft));
+        this.draftStatus = 'در حال ذخیره…';
+        this.draftWrite = this.draftWrite.then(async () => {
+            await mailRequest('draft', 'PUT', snapshot);
+            this.draftStatus = 'پیش‌نویس ذخیره شد';
+        }).catch(error => {
+            this.draftStatus = 'پیش‌نویس ذخیره نشد';
+            this.notify(error.message);
+        });
         return this.draftWrite;
     },
-    discardDraft() {
+    async discardDraft() {
+        const ids = [...this.draft.attachments];
         this.draft = emptyDraft();
-        this.saveDraft();
+        this.recipientInputs = {to: '', cc: '', bcc: ''};
+        this.recipientErrors = {};
+        this.previewOpen = false;
+        await this.writeDraft();
+        await Promise.all(ids.map(id => this.deleteUpload(id)));
+        this.draftStatus = '';
     },
     async send() {
-        if (this.busy) return;
+        if (this.busy || this.uploading) return;
+        if (!['to', 'cc', 'bcc'].every(field => this.commitRecipients(field))) return;
+        if (!this.draft.to.length) {
+            this.recipientErrors.to = 'دست‌کم یک گیرنده وارد کنید.';
+            this.$refs.recipientTo.focus();
+            return;
+        }
         this.busy = true;
         try {
             clearTimeout(this.draftTimer);
             await this.writeDraft();
             this.submission ??= crypto.randomUUID();
             sessionStorage.setItem('kioosk.submission', this.submission);
-            await mailRequest('send', 'POST', {...this.draft, submission: this.submission, reply: this.reply});
+            await mailRequest('send', 'POST', {...this.draft, submission: this.submission});
             sessionStorage.removeItem('kioosk.submission');
             location.assign(this.folderUrl('sent'));
         } catch (error) {

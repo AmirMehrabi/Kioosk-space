@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\ComposeAttachments;
 use App\Services\MailBody;
 use App\Services\MailExcerpt;
 use App\Services\StalwartMail;
@@ -15,7 +16,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 class MailboxController extends Controller
 {
-    public function __construct(private StalwartMail $mail, private MailExcerpt $excerpt, private MailBody $body) {}
+    public function __construct(private StalwartMail $mail, private MailExcerpt $excerpt, private MailBody $body, private ComposeAttachments $uploads) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -68,6 +69,7 @@ class MailboxController extends Controller
         return response()->json($this->row($email, '') + [
             'text' => $fallback,
             'html' => $this->body->render($fallback, $html),
+            'replyAll' => array_values(array_unique(array_filter(array_merge([$email['replyTo'][0]['email'] ?? $email['from'][0]['email'] ?? null], array_column($email['to'] ?? [], 'email'), array_column($email['cc'] ?? [], 'email')), fn ($address) => $address && strcasecmp($address, $user->mailbox_address) !== 0))),
             'attachments' => $attachments,
         ]);
     }
@@ -107,20 +109,59 @@ class MailboxController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    public function upload(Request $request): JsonResponse
+    {
+        $data = $request->validate(['file' => ['required', 'file', 'max:8192']]);
+        abort_unless($request->user()->mail_account_id, 503);
+
+        return response()->json($this->uploads->store($request->user(), $data['file']), 201);
+    }
+
+    public function removeUpload(Request $request, string $id): Response
+    {
+        $this->uploads->delete($request->user(), $id);
+
+        return response()->noContent();
+    }
+
+    public function preview(Request $request): JsonResponse
+    {
+        $data = $request->validate(['body' => 'nullable|string|max:100000']);
+
+        return response()->json(['html' => $this->body->render($data['body'] ?? '', '')]);
+    }
+
     public function draft(Request $request): JsonResponse
     {
-        $data = $request->validate(['to' => 'nullable|string|max:254', 'subject' => 'nullable|string|max:300', 'body' => 'nullable|string|max:100000']);
+        $data = $this->composeInput($request, false);
+        $data['files'] = $this->uploads->metadata($request->user(), $data['attachments'] ?? []);
         $request->user()->forceFill(['mail_draft' => $data])->save();
 
         return response()->json(['ok' => true]);
     }
 
+    private function composeInput(Request $request, bool $sending): array
+    {
+        if (is_string($request->input('to'))) {
+            $request->merge(['to' => $request->input('to') === '' ? [] : [$request->input('to')]]);
+        }
+        $required = $sending ? 'required' : 'nullable';
+        $address = $sending ? 'required|email:rfc|max:254' : 'required|string|max:254';
+
+        return $request->validate([
+            'to' => $required.'|array|max:25', 'cc' => 'nullable|array|max:25', 'bcc' => 'nullable|array|max:25',
+            'to.*' => $address, 'cc.*' => $address, 'bcc.*' => $address,
+            'subject' => $required.'|string|max:300', 'body' => 'nullable|string|max:100000',
+            'attachments' => 'nullable|array|max:10', 'attachments.*' => 'required|uuid|distinct',
+            'reply' => 'nullable|string|max:128',
+            'submission' => $sending ? 'required|uuid' : 'exclude',
+        ], ['to.required' => 'دست‌کم یک گیرنده وارد کنید.', '*.email' => 'نشانی یکی از گیرندگان معتبر نیست.']);
+    }
+
     public function send(Request $request): JsonResponse
     {
-        $data = $request->validate([
-            'to' => 'required|email:rfc|max:254', 'subject' => 'required|string|max:300', 'body' => 'required|string|max:100000',
-            'submission' => 'required|uuid', 'reply' => 'nullable|string|max:128',
-        ]);
+        $data = $this->composeInput($request, true);
+        abort_if(count($data['to']) + count($data['cc'] ?? []) + count($data['bcc'] ?? []) > 25, 422, 'حداکثر ۲۵ گیرنده مجاز است.');
         $user = $request->user();
         abort_unless($user->mail_account_id, 503);
         $key = 'mail-send:'.$user->id.':'.$data['submission'];
@@ -133,11 +174,16 @@ class MailboxController extends Controller
             $boxes = collect($this->mail->request('Mailbox/get', ['properties' => ['id', 'role']], $user)['list'])->keyBy('role');
             $identity = collect($this->mail->request('Identity/get', [], $user)['list'])->firstWhere('email', $user->mailbox_address);
             abort_unless($identity && isset($boxes['drafts'], $boxes['sent']), 503);
+            $text = $data['body'] ?? '';
+            $html = $this->body->render($text, '');
+            $part = fn (string $field) => array_map(fn ($email) => ['email' => $email], array_values(array_unique($data[$field] ?? [])));
             $message = [
                 'mailboxIds' => [$boxes['drafts']['id'] => true], 'keywords' => ['$draft' => true, '$seen' => true],
                 'from' => [['email' => $user->mailbox_address, 'name' => $user->name]],
-                'to' => [['email' => $data['to']]], 'subject' => $data['subject'],
-                'textBody' => [['partId' => 'text', 'type' => 'text/plain']], 'bodyValues' => ['text' => ['value' => $data['body']]],
+                'to' => $part('to'), 'cc' => $part('cc'), 'bcc' => $part('bcc'), 'subject' => $data['subject'],
+                'textBody' => [['partId' => 'text', 'type' => 'text/plain']],
+                'htmlBody' => [['partId' => 'html', 'type' => 'text/html']],
+                'bodyValues' => ['text' => ['value' => $this->body->plainText($html)], 'html' => ['value' => '<div dir="auto">'.$html.'</div>']],
             ];
             if (! empty($data['reply'])) {
                 $original = $this->email($request, $data['reply']);
@@ -145,6 +191,9 @@ class MailboxController extends Controller
                     $message['inReplyTo'] = $original['messageId'];
                     $message['references'] = array_slice(array_merge($original['references'] ?? [], $original['messageId']), -20);
                 }
+            }
+            if (! empty($data['attachments'])) {
+                $message['attachments'] = $this->uploads->upload($user, $data['attachments']);
             }
             $new = $this->mail->request('Email/set', ['create' => ['message' => $message]], $user);
             $id = $new['created']['message']['id'] ?? null;
@@ -160,6 +209,9 @@ class MailboxController extends Controller
             }
             Cache::put($key, 'sent', now()->addDays(7));
             $user->forceFill(['mail_draft' => null])->save();
+            foreach ($data['attachments'] ?? [] as $attachment) {
+                $this->uploads->delete($user, $attachment);
+            }
 
             return response()->json(['ok' => true]);
         });

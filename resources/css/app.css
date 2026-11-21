@@ -306,3 +306,35 @@ h1 { font-size: clamp(26px, 3.8vw, 40px); line-height: 1.22; font-weight: 850; m
 .message-rich blockquote { border-inline-start: 2px solid var(--border); padding-inline-start: .8em; color: var(--muted); }
 .message-rich pre { white-space: pre-wrap; padding: .7em; border-radius: 8px; background: var(--subtle); }
 .message-rich :where(th, td) { padding: .3em .65em; border: 1px solid var(--border); }
+
+.recipient-field { flex-wrap: wrap; padding-block: 8px; }
+.recipient-field > label { width: 82px; flex: none; font-weight: 750; }
+.recipient-control { flex: 1; min-width: 120px; }
+.recipient-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.recipient-chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 2px 8px; border-radius: 9px; background: var(--subtle); color: var(--ink); }
+.recipient-chip bdi, .compose-file bdi { overflow-wrap: anywhere; }
+.recipient-chip button { min-width: 32px; min-height: 32px; font-size: 19px; }
+.field .recipient-chips input { flex: 1; min-width: 118px; text-align: left; }
+.recipient-options, .format-toolbar, .attachments-toolbar, .compose-file { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.recipient-options button, .format-toolbar button { min-height: 44px; padding: 5px 9px; border-radius: 8px; color: #124479; font-weight: 750; }
+.recipient-options button:hover, .format-toolbar button:hover { background: var(--subtle); }
+.recipient-error { color: #912731; }
+.format-toolbar { padding: 6px 13px; border-bottom: 1px solid var(--border); }
+.format-toolbar button { min-width: 44px; }
+.format-preview { margin-inline-start: auto; }
+.compose-preview { min-height: 290px; padding: 22px; }
+.compose-attachments { padding: 10px 16px; border-top: 1px solid var(--border); }
+.compose-attachments small { color: var(--muted); }
+.compose-file { padding: 7px 0; border-top: 1px solid var(--border); margin-top: 8px; }
+.compose-file progress { accent-color: var(--blue); }
+.thread-replies { display: flex; justify-content: center; gap: 9px; margin-top: 12px; }
+.thread-replies .reply-tile { flex: 1; margin: 0; }
+.compose-dialog { margin: auto; max-width: min(375px, calc(100% - 24px)); padding: 22px; color: var(--ink); }
+.compose-dialog::backdrop { background: #12233870; }
+.compose-dialog h2 { font-size: 19px; font-weight: 850; }
+.compose-dialog p { margin: 8px 0 15px; color: var(--muted); }
+@media (max-width: 520px) {
+    .recipient-field { column-gap: 4px; }
+    .recipient-field > label { width: 69px; font-size: 14px; }
+    .recipient-options { margin-inline-start: 64px; }
+}
