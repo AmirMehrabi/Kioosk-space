@@ -34,4 +34,30 @@ class MailboxPaginationTest extends TestCase
         $this->actingAs($user)->getJson('/mail/data?folder=imbox&q=&position=35')
             ->assertOk()->assertJsonPath('messages', []);
     }
+
+    public function test_inbox_sections_query_unread_and_seen_mail_separately(): void
+    {
+        config(['stalwart.url' => 'https://stalwart.example.test']);
+        $user = User::factory()->create(['mailbox_address' => 'pilot@kioosk.space']);
+        $user->forceFill(['mail_account_id' => 'pilot', 'mail_secret' => 'test-secret'])->save();
+
+        $filters = [];
+        Http::fake(function (Request $request) use (&$filters) {
+            [$method, $arguments] = $request->data()['methodCalls'][0];
+            if ($method === 'Mailbox/get') {
+                return Http::response(['methodResponses' => [[$method, ['list' => [['id' => 'inbox', 'role' => 'inbox']]], 'call']]]);
+            }
+
+            $filters[] = $arguments['filter'];
+
+            return Http::response(['methodResponses' => [[$method, ['ids' => []], 'call']]]);
+        });
+
+        $this->actingAs($user)->getJson('/mail/data?folder=imbox&section=unread')->assertOk();
+        $this->getJson('/mail/data?folder=imbox&section=seen')->assertOk();
+        $this->assertSame([
+            ['inMailbox' => 'inbox', 'notKeyword' => '$seen'],
+            ['inMailbox' => 'inbox', 'hasKeyword' => '$seen'],
+        ], $filters);
+    }
 }

@@ -19,7 +19,7 @@ class MailboxController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $data = $request->validate(['folder' => 'required|in:imbox,sent,feed,receipts,later,saved', 'q' => 'nullable|string|max:200', 'position' => 'nullable|integer|min:0|max:100000']);
+        $data = $request->validate(['folder' => 'required|in:imbox,sent,feed,receipts,later,saved', 'q' => 'nullable|string|max:200', 'position' => 'nullable|integer|min:0|max:100000', 'section' => 'nullable|in:unread,seen']);
         $user = $request->user();
         try {
             $this->mail->ensureAccount($user);
@@ -31,6 +31,8 @@ class MailboxController extends Controller
             };
             if (! empty($data['q'])) {
                 $filter = ['text' => $data['q'], 'notKeyword' => '$draft'];
+            } elseif ($folder === 'imbox' && isset($data['section'])) {
+                $filter[$data['section'] === 'unread' ? 'notKeyword' : 'hasKeyword'] = '$seen';
             }
             $ids = $this->mail->request('Email/query', [
                 'filter' => $filter, 'position' => (int) ($data['position'] ?? 0), 'limit' => 35,

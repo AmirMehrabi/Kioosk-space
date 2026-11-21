@@ -76,7 +76,7 @@ Alpine.data('mailbox', () => ({
     loading: false,
     busy: false,
     loadError: '',
-    more: false,
+    pages: {},
     loadVersion: 0,
     draftTimer: null,
     searchTimer: null,
@@ -110,18 +110,30 @@ Alpine.data('mailbox', () => ({
             }
         }
     },
-    async load(append = false) {
+    get splitInbox() {
+        return !this.compose && this.folderKey === 'imbox' && !this.query.trim();
+    },
+    async load(append = false, section = 'all') {
         const version = ++this.loadVersion;
         this.loading = true;
         if (!append) this.loadError = '';
         try {
-            const params = new URLSearchParams({folder: this.folderKey, q: this.query, position: append ? this.messages.length : 0});
-            const data = await mailRequest('data?' + params);
-            if (version !== this.loadVersion) return false;
-            const rows = data.messages.map(message => ({...message, time: time.format(new Date(message.receivedAt))}));
-            this.messages = append ? [...new Map([...this.messages, ...rows].map(row => [row.id, row])).values()] : rows;
-            this.more = data.more;
-            if (this.compose) this.draft = {...emptyDraft(), ...data.draft};
+            const sections = !append && this.splitInbox ? ['unread', 'seen'] : [section];
+            const pages = append ? {...this.pages} : {};
+            const messages = append ? [...this.messages] : [];
+            for (const key of sections) {
+                const position = append ? pages[key]?.position ?? 0 : 0;
+                const params = new URLSearchParams({folder: this.folderKey, q: this.query.trim(), position});
+                if (key !== 'all') params.set('section', key);
+                const data = await mailRequest('data?' + params);
+                if (version !== this.loadVersion) return false;
+
+                messages.push(...data.messages.map(message => ({...message, time: time.format(new Date(message.receivedAt))})));
+                pages[key] = {more: data.more, position: position + data.messages.length};
+                if (this.compose) this.draft = {...emptyDraft(), ...data.draft};
+            }
+            this.messages = [...new Map(messages.map(row => [row.id, row])).values()];
+            this.pages = pages;
             return true;
         } catch (error) {
             if (version === this.loadVersion) this.loadError = error.message;
@@ -187,13 +199,13 @@ Alpine.data('mailbox', () => ({
         return this.messages;
     },
     get groups() {
-        if (this.folderKey === 'imbox' && !this.query.trim()) {
+        if (this.splitInbox) {
             return [
-                { label: 'تازه برای شما', messages: this.visible.filter((message) => !message.read) },
-                { label: 'دیده‌شده‌ها', messages: this.visible.filter((message) => message.read) },
-            ].filter((group) => group.messages.length);
+                { key: 'unread', label: 'تازه برای شما', messages: this.visible.filter(message => !message.read) },
+                { key: 'seen', label: 'دیده‌شده‌ها', messages: this.visible.filter(message => message.read).sort((a, b) => b.receivedAt.localeCompare(a.receivedAt)) },
+            ];
         }
-        return this.visible.length ? [{ label: 'نامه‌ها', messages: this.visible }] : [];
+        return this.visible.length ? [{ key: 'all', label: 'نامه‌ها', messages: this.visible }] : [];
     },
     async openMessage(message) {
         this.selected = {...message};

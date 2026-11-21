@@ -121,6 +121,14 @@ h1 { font-size: clamp(26px, 3.8vw, 40px); line-height: 1.22; font-weight: 850; m
 .eyebrow { display: flex; align-items: center; gap: 7px; color: #124479; margin: 0 0 8px; font-weight: 750; font-size: 13px; }
 .eyebrow span, .unread-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--blue); }
 .intro-description { color: var(--muted); margin: 7px 0 0; }
+.inbox-group {
+    padding: clamp(12px, 2.2vw, 22px); border: 1px solid var(--border); border-radius: 18px;
+    background: var(--surface);
+}
+.inbox-group.inbox-unread { background: #f4f5f7; }
+.inbox-group .message-list { box-shadow: none; border-radius: 12px; }
+.inbox-empty { display: grid; place-items: center; min-height: 96px; margin: 0; color: var(--muted); text-align: center; }
+.group-more { margin-block-start: 10px; }
 .message-group { margin-block: 0 24px; }
 .group-title { display: flex; align-items: center; gap: 9px; margin: 0 3px 9px; }
 .group-title h2 { margin: 0; font-size: 16px; font-weight: 850; }
@@ -187,11 +195,6 @@ h1 { font-size: clamp(26px, 3.8vw, 40px); line-height: 1.22; font-weight: 850; m
 .composer textarea { display: block; width: 100%; min-height: 290px; resize: vertical; padding: 22px; line-height: 1.9; outline-offset: -3px; }
 .compose-footer { border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 15px 22px; }
 .compose-footer small { color: var(--muted); }
-.piles { display: flex; flex-wrap: wrap; gap: 12px; margin-block-start: 28px; }
-.pile { flex: 1 1 205px; display: flex; align-items: center; gap: 10px; min-height: 61px; background: var(--subtle); border: 1px solid var(--border); border-radius: 14px; padding: 9px 13px; }
-.pile:hover, .pile[aria-current=page] { background: var(--subtle-hover); border-color: #cfcbc3; }
-.pile-icon { display: grid; place-items: center; width: 36px; height: 36px; background: var(--surface); border-radius: 9px; color: var(--blue); }
-.pile-count { color: var(--muted); font-size: 13px; margin-inline-start: auto; }
 .toast { opacity: 0; pointer-events: none; position: fixed; z-index: 5; inset-inline-end: 20px; inset-block-end: 20px; padding: 13px 19px; border-radius: 10px; background: var(--navy); color: white; box-shadow: 0 6px 20px #0a193133; }
 .toast.has-notice { opacity: 1; }
 @media (max-width: 750px) {

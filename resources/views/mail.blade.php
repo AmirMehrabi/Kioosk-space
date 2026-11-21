@@ -97,10 +97,10 @@
                             <p class="intro-description" x-text="query ? number(visible.length) + ' نامه پیدا شد' : folders[folderKey].description"></p>
                         </div>
                     </section>
-                    <template x-for="group in groups" :key="group.label">
-                        <section class="message-group">
-                            <div class="group-title"><h2 x-text="group.label"></h2><span x-text="number(group.messages.length)"></span></div>
-                            <div class="message-list">
+                    <template x-for="group in groups" :key="group.key">
+                        <section class="message-group" :class="{'inbox-group': group.key !== 'all', 'inbox-unread': group.key === 'unread'}" :aria-label="group.label">
+                            <div class="group-title"><h2 x-text="group.label"></h2><span x-show="group.messages.length" x-text="number(group.messages.length)"></span></div>
+                            <div class="message-list" x-show="group.messages.length">
                                 <template x-for="message in group.messages" :key="message.id">
                                     <button type="button" class="message-row" :data-message="message.id" :class="{unread: !message.read}" @click="openMessage(message)">
                                         <span class="avatar" :class="message.color" x-text="message.initial"></span>
@@ -110,20 +110,12 @@
                                     </button>
                                 </template>
                             </div>
+                            <p class="inbox-empty" x-show="!loading && !loadError && group.key === 'unread' && !group.messages.length">نامه‌ی جدیدی ندارید</p>
+                            <p class="inbox-empty" x-show="!loading && !loadError && group.key === 'seen' && !group.messages.length">هنوز نامه‌ای ندیده‌اید.</p>
+                            <button class="secondary group-more" type="button" x-show="pages[group.key]?.more && !loading && !loadError" @click="load(true, group.key)">نامه‌های بیشتر</button>
                         </section>
                     </template>
-                    <div class="empty" x-show="!loading && !loadError && !visible.length"><span x-html="icons.inbox"></span><p>نامه‌ای اینجا نیست.</p></div>
-                    <button class="secondary" type="button" x-show="more && !loading && !loadError" @click="load(true)">نامه‌های بیشتر</button>
-                    <nav class="piles" aria-label="پیگیری نامه‌ها">
-                        <template x-for="key in ['later', 'saved']" :key="key">
-                            <a class="pile" :href="folderUrl(key)" @click="navigateFolder(key, $event)"
-                                :aria-current="folderKey === key ? 'page' : null">
-                                <span class="pile-icon" x-html="icons[folders[key].icon]"></span>
-                                <strong x-text="folders[key].title"></strong>
-                                <span class="pile-count" x-text="number(messages.filter(message => message[key]).length) + ' نامه'"></span>
-                            </a>
-                        </template>
-                    </nav>
+                    <div class="empty" x-show="!splitInbox && !loading && !loadError && !visible.length"><span x-html="icons.inbox"></span><p>نامه‌ای اینجا نیست.</p></div>
                 </div>
             </template>
 
