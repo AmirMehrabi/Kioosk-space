@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\MailExcerpt;
 use App\Services\StalwartMail;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -13,7 +14,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 class MailboxController extends Controller
 {
-    public function __construct(private StalwartMail $mail) {}
+    public function __construct(private StalwartMail $mail, private MailExcerpt $excerpt) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -180,7 +181,7 @@ class MailboxController extends Controller
             'id' => $email['id'], 'subject' => ($email['subject'] ?? '') ?: 'بدون موضوع',
             'sender' => $sender, 'initial' => Str::substr($sender, 0, 1), 'email' => $address['email'] ?? '',
             'recipient' => implode('، ', array_column($email['to'] ?? [], 'email')),
-            'body' => $email['preview'] ?? '', 'receivedAt' => $email['receivedAt'],
+            'body' => $this->excerpt->make($email['preview'] ?? ''), 'receivedAt' => $email['receivedAt'],
             'folder' => $isSent ? 'sent' : 'imbox', 'read' => isset($flags['$seen']),
             'later' => isset($flags['kioosk-later']), 'saved' => isset($flags['kioosk-saved']),
             'feed' => isset($flags['kioosk-feed']), 'receipts' => isset($flags['kioosk-receipts']),
