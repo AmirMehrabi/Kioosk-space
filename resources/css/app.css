@@ -121,13 +121,18 @@ h1 { font-size: clamp(26px, 3.8vw, 40px); line-height: 1.22; font-weight: 850; m
 .eyebrow { display: flex; align-items: center; gap: 7px; color: #124479; margin: 0 0 8px; font-weight: 750; font-size: 13px; }
 .eyebrow span, .unread-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--blue); }
 .intro-description { color: var(--muted); margin: 7px 0 0; }
-.inbox-group {
-    padding: clamp(12px, 2.2vw, 22px); border: 1px solid var(--border); border-radius: 18px;
-    background: var(--surface);
+.mail-placeholder, .composer-region { position: relative; }
+.mail-placeholder { min-height: 96px; }
+.mail-loading { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+.mail-spinner {
+    width: 29px; height: 29px; border: 2px solid #dce4ef; border-inline-start-color: var(--blue);
+    border-radius: 50%; animation: mail-spin .82s linear infinite;
 }
-.inbox-group.inbox-unread { background: #f4f5f7; }
-.inbox-group .message-list { box-shadow: none; border-radius: 12px; }
-.inbox-empty { display: grid; place-items: center; min-height: 96px; margin: 0; color: var(--muted); text-align: center; }
+@keyframes mail-spin { to { transform: rotate(1turn); } }
+@media (prefers-reduced-motion: reduce) { .mail-spinner { animation: none; } }
+.inbox-empty { display: grid; place-items: center; min-height: inherit; margin: 0; color: var(--muted); text-align: center; }
+.composer-loading { visibility: hidden; }
+.message-content { position: relative; min-height: 130px; }
 .group-more { margin-block-start: 10px; }
 .message-group { margin-block: 0 24px; }
 .group-title { display: flex; align-items: center; gap: 9px; margin: 0 3px 9px; }
@@ -137,6 +142,9 @@ h1 { font-size: clamp(26px, 3.8vw, 40px); line-height: 1.22; font-weight: 850; m
 .message-row { width: 100%; min-height: 70px; display: grid; grid-template-columns: 40px minmax(100px, 145px) minmax(0,1fr) max-content 7px; align-items: center; gap: 14px; text-align: start; padding: 11px 17px; }
 .message-row + .message-row { border-block-start: 1px solid var(--border); }
 .message-row:hover, .message-row:focus-visible { background: var(--subtle); }
+.message-row.unread { min-height: 78px; background: #f0f3f7; }
+.message-row.unread:hover, .message-row.unread:focus-visible { background: #e9eef5; }
+.message-row.unread .message-copy strong { font-size: 15px; }
 .message-row:focus-visible { outline-offset: -2px; }
 .sender { font-size: 14px; font-weight: 720; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .message-copy { display: grid; min-width: 0; gap: 1px; font-size: 14px; }

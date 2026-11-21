@@ -86,7 +86,6 @@
 
     <div class="workspace">
         <main class="content" id="main-content" tabindex="-1">
-            <p class="account-status" role="status" x-show="loading && !messages.length">در حال آماده‌سازی صندوق…</p>
             <div class="empty" x-show="loadError" role="alert"><p x-text="loadError"></p><button class="secondary" @click="load()">تلاش دوباره</button></div>
             <template x-if="!compose && !selected">
                 <div>
@@ -98,7 +97,7 @@
                         </div>
                     </section>
                     <template x-for="group in groups" :key="group.key">
-                        <section class="message-group" :class="{'inbox-group': group.key !== 'all', 'inbox-unread': group.key === 'unread'}" :aria-label="group.label">
+                        <section class="message-group" :aria-label="group.label">
                             <div class="group-title"><h2 x-text="group.label"></h2><span x-show="group.messages.length" x-text="number(group.messages.length)"></span></div>
                             <div class="message-list" x-show="group.messages.length">
                                 <template x-for="message in group.messages" :key="message.id">
@@ -110,12 +109,19 @@
                                     </button>
                                 </template>
                             </div>
-                            <p class="inbox-empty" x-show="!loading && !loadError && group.key === 'unread' && !group.messages.length">نامه‌ی جدیدی ندارید</p>
-                            <p class="inbox-empty" x-show="!loading && !loadError && group.key === 'seen' && !group.messages.length">هنوز نامه‌ای ندیده‌اید.</p>
-                            <button class="secondary group-more" type="button" x-show="pages[group.key]?.more && !loading && !loadError" @click="load(true, group.key)">نامه‌های بیشتر</button>
+                            <div class="mail-placeholder" x-show="group.key !== 'all' && !group.messages.length">
+                                <x-mail-spinner x-show="loading && !pages[group.key] && group.key === 'unread'" />
+                                <p class="inbox-empty" x-show="!loadError && (!loading || pages[group.key])"
+                                    x-text="group.key === 'unread' ? 'نامه‌ی جدیدی ندارید' : 'هنوز نامه‌ای ندیده‌اید.'"></p>
+                            </div>
+                            <button class="secondary group-more" type="button" x-show="pages[group.key]?.more && !loadError"
+                                :disabled="loading" @click="load(true, group.key)">نامه‌های بیشتر</button>
                         </section>
                     </template>
-                    <div class="empty" x-show="!splitInbox && !loading && !loadError && !visible.length"><span x-html="icons.inbox"></span><p>نامه‌ای اینجا نیست.</p></div>
+                    <div class="mail-placeholder folder-placeholder" x-show="!splitInbox && !visible.length">
+                            <x-mail-spinner x-show="loading" />
+                        <p class="inbox-empty" x-show="!loading && !loadError">نامه‌ای اینجا نیست.</p>
+                    </div>
                 </div>
             </template>
 
@@ -155,12 +161,15 @@
                                 <time x-text="selected.time"></time>
                             </div>
                         </div>
-                        <template x-if="selected.html">
-                            <div class="message-body message-rich" dir="auto" x-html="selected.html"></div>
-                        </template>
-                        <template x-if="!selected.html">
-                            <p class="message-body" dir="auto" x-text="selected.body"></p>
-                        </template>
+                        <div class="message-content">
+                            <x-mail-spinner x-show="selected.loading" />
+                            <template x-if="!selected.loading && selected.html">
+                                <div class="message-body message-rich" dir="auto" x-html="selected.html"></div>
+                            </template>
+                            <template x-if="!selected.loading && !selected.html">
+                                <p class="message-body" dir="auto" x-text="selected.body"></p>
+                            </template>
+                        </div>
                         <div class="actions" x-show="selected.attachments?.length">
                             <template x-for="file in selected.attachments ?? []" :key="file.url">
                                 <a class="secondary" :href="file.url" x-text="file.name"></a>
@@ -176,18 +185,21 @@
             <template x-if="compose">
                 <section class="compose-page">
                     <div class="compose-heading"><div class="heading-icon" x-html="icons.edit"></div><div><h1>نامهٔ جدید</h1><p dir="ltr">{{ $mailboxAddress }}</p></div></div>
-                    <form class="paper composer" @submit.prevent="send" x-show="!loading && !loadError">
-                        <label class="field"><span>گیرنده</span><input type="email" required dir="ltr" placeholder="name@example.com" x-model="draft.to" @input="saveDraft"></label>
-                        <label class="field"><span>موضوع</span><input required dir="auto" placeholder="موضوع نامه" x-model="draft.subject" @input="saveDraft"></label>
-                        <textarea required dir="auto" aria-label="متن نامه" placeholder="متن نامه را اینجا بنویسید…" x-model="draft.body" @input="saveDraft"></textarea>
-                        <div class="compose-footer">
-                            <div class="actions">
-                                <button class="primary" type="submit" :disabled="busy"><span x-html="icons.send"></span><span x-text="busy ? 'در حال ارسال…' : 'ارسال نامه'"></span></button>
-                                <button class="secondary discard" type="button" @click="discardDraft" x-show="draft.to || draft.subject || draft.body">پاک کردن پیش‌نویس</button>
+                    <div class="composer-region">
+                        <x-mail-spinner x-show="loading" />
+                        <form class="paper composer" :inert="loading || Boolean(loadError)" :class="{'composer-loading': loading}" @submit.prevent="send">
+                            <label class="field"><span>گیرنده</span><input type="email" required dir="ltr" placeholder="name@example.com" x-model="draft.to" @input="saveDraft"></label>
+                            <label class="field"><span>موضوع</span><input required dir="auto" placeholder="موضوع نامه" x-model="draft.subject" @input="saveDraft"></label>
+                            <textarea required dir="auto" aria-label="متن نامه" placeholder="متن نامه را اینجا بنویسید…" x-model="draft.body" @input="saveDraft"></textarea>
+                            <div class="compose-footer">
+                                <div class="actions">
+                                    <button class="primary" type="submit" :disabled="busy"><span x-html="icons.send"></span><span x-text="busy ? 'در حال ارسال…' : 'ارسال نامه'"></span></button>
+                                    <button class="secondary discard" type="button" @click="discardDraft" x-show="draft.to || draft.subject || draft.body">پاک کردن پیش‌نویس</button>
+                                </div>
+                                <small x-show="draft.to || draft.subject || draft.body">پیش‌نویس در صندوق شما ذخیره می‌شود</small>
                             </div>
-                            <small x-show="draft.to || draft.subject || draft.body">پیش‌نویس در صندوق شما ذخیره می‌شود</small>
-                        </div>
-                    </form>
+                        </form>
+                    </div>
                 </section>
             </template>
         </main>

@@ -208,7 +208,7 @@ Alpine.data('mailbox', () => ({
         return this.visible.length ? [{ key: 'all', label: 'نامه‌ها', messages: this.visible }] : [];
     },
     async openMessage(message) {
-        this.selected = {...message};
+        this.selected = {...message, loading: true};
         this.$nextTick(() => document.getElementById('message-heading')?.focus());
         try {
             const detail = await mailRequest('message/' + encodeURIComponent(message.id));
@@ -216,6 +216,7 @@ Alpine.data('mailbox', () => ({
             this.selected = {...message, ...detail, folder: message.folder, sender: message.sender, email: message.email, body: detail.text};
             if (!message.read) await this.setFlag('read', true);
         } catch (error) {
+            if (this.selected?.id === message.id) this.selected.loading = false;
             this.notify(error.message);
         }
     },
