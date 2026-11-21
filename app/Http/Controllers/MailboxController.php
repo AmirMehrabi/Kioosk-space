@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\MailBody;
 use App\Services\MailExcerpt;
 use App\Services\StalwartMail;
 use Illuminate\Http\JsonResponse;
@@ -14,7 +15,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 class MailboxController extends Controller
 {
-    public function __construct(private StalwartMail $mail, private MailExcerpt $excerpt) {}
+    public function __construct(private StalwartMail $mail, private MailExcerpt $excerpt, private MailBody $body) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -58,7 +59,15 @@ class MailboxController extends Controller
             'url' => route('mail.attachment', ['id' => $id, 'blob' => $file['blobId']], false),
         ], $email['attachments'] ?? []);
 
-        return response()->json($this->row($email, '') + ['text' => $this->plainBody($email), 'attachments' => $attachments]);
+        $text = $this->bodyParts($email, 'textBody');
+        $html = $this->bodyParts($email, 'htmlBody');
+        $fallback = $text !== '' ? $text : ($email['preview'] ?? '');
+
+        return response()->json($this->row($email, '') + [
+            'text' => $fallback,
+            'html' => $this->body->render($fallback, $html),
+            'attachments' => $attachments,
+        ]);
     }
 
     public function attachment(Request $request, string $id, string $blob): Response
@@ -157,17 +166,17 @@ class MailboxController extends Controller
     private function email(Request $request, string $id): array
     {
         $result = $this->mail->request('Email/get', [
-            'ids' => [$id], 'fetchTextBodyValues' => true, 'maxBodyValueBytes' => 160000,
+            'ids' => [$id], 'fetchTextBodyValues' => true, 'fetchHTMLBodyValues' => true, 'maxBodyValueBytes' => 160000,
         ], $request->user());
 
         return $result['list'][0] ?? abort(404);
     }
 
-    private function plainBody(array $email): string
+    private function bodyParts(array $email, string $type): string
     {
-        $parts = array_map(fn ($part) => $email['bodyValues'][$part['partId']]['value'] ?? '', $email['textBody'] ?? []);
+        $parts = array_map(fn ($part) => $email['bodyValues'][$part['partId']]['value'] ?? '', $email[$type] ?? []);
 
-        return trim(implode("\n\n", $parts)) ?: ($email['preview'] ?? '');
+        return trim(implode("\n\n", $parts));
     }
 
     private function row(array $email, string $sent): array

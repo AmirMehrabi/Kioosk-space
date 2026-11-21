@@ -163,7 +163,12 @@
                                 <time x-text="selected.time"></time>
                             </div>
                         </div>
-                        <p class="message-body" dir="auto" x-text="selected.body"></p>
+                        <template x-if="selected.html">
+                            <div class="message-body message-rich" dir="auto" x-html="selected.html"></div>
+                        </template>
+                        <template x-if="!selected.html">
+                            <p class="message-body" dir="auto" x-text="selected.body"></p>
+                        </template>
                         <div class="actions" x-show="selected.attachments?.length">
                             <template x-for="file in selected.attachments ?? []" :key="file.url">
                                 <a class="secondary" :href="file.url" x-text="file.name"></a>

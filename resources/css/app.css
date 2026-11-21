@@ -283,3 +283,14 @@ h1 { font-size: clamp(26px, 3.8vw, 40px); line-height: 1.22; font-weight: 850; m
 .account-card .account-status, .account-errors { padding: 9px 11px; margin-block: 12px 0; border-radius: 9px; }
 .account-card .account-status { color: #175c42; background: #ecf6f0; }
 .account-errors { color: #912731; background: #fff0f1; }
+
+.message-rich { white-space: normal; overflow-x: auto; }
+.message-rich :where(p, div, ul, ol, blockquote, pre, table, hr) { margin-block: .7em; }
+.message-rich :where(h1, h2, h3, h4, h5, h6) { font-size: 1.15em; font-weight: 800; margin-block: .85em .35em; }
+.message-rich :where(ul, ol) { padding-inline-start: 1.5em; }
+.message-rich ul { list-style: disc; }
+.message-rich ol { list-style: decimal; }
+.message-rich a[href] { color: var(--blue); text-decoration: underline; }
+.message-rich blockquote { border-inline-start: 2px solid var(--border); padding-inline-start: .8em; color: var(--muted); }
+.message-rich pre { white-space: pre-wrap; padding: .7em; border-radius: 8px; background: var(--subtle); }
+.message-rich :where(th, td) { padding: .3em .65em; border: 1px solid var(--border); }
