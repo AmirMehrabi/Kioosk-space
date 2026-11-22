@@ -20,20 +20,23 @@ class MailboxController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $data = $request->validate(['folder' => 'required|in:imbox,sent,feed,receipts,later,saved', 'q' => 'nullable|string|max:200', 'position' => 'nullable|integer|min:0|max:100000', 'section' => 'nullable|in:unread,seen']);
+        $data = $request->validate(['folder' => 'required|in:imbox,sent,trash,feed,receipts,later,saved', 'q' => 'nullable|string|max:200', 'position' => 'nullable|integer|min:0|max:100000', 'section' => 'nullable|in:unread,seen']);
         $user = $request->user();
         try {
             $this->mail->ensureAccount($user);
             $boxes = collect($this->mail->request('Mailbox/get', ['properties' => ['id', 'role']], $user)['list'])->keyBy('role');
             $folder = $data['folder'];
             $filter = match ($folder) {
-                'imbox', 'sent' => ['inMailbox' => $boxes[$folder === 'imbox' ? 'inbox' : 'sent']['id']],
+                'imbox', 'sent', 'trash' => ['inMailbox' => $boxes[$folder === 'imbox' ? 'inbox' : $folder]['id']],
                 default => ['hasKeyword' => 'kioosk-'.$folder],
             };
             if (! empty($data['q'])) {
                 $filter = ['text' => $data['q'], 'notKeyword' => '$draft'];
             } elseif ($folder === 'imbox' && isset($data['section'])) {
                 $filter[$data['section'] === 'unread' ? 'notKeyword' : 'hasKeyword'] = '$seen';
+            }
+            if ($folder !== 'trash' && isset($boxes['trash'])) {
+                $filter['inMailboxOtherThan'] = [$boxes['trash']['id']];
             }
             $ids = $this->mail->request('Email/query', [
                 'filter' => $filter, 'position' => (int) ($data['position'] ?? 0), 'limit' => 35,
@@ -67,7 +70,8 @@ class MailboxController extends Controller
         $fallback = $text !== '' ? $text : ($email['preview'] ?? '');
 
         return response()->json($this->row($email, '') + [
-            'text' => $fallback,
+            'text' => $text !== '' ? $text : $this->body->plainText($this->body->render($fallback, $html)),
+            'from' => $email['from'][0]['email'] ?? '',
             'html' => $this->body->render($fallback, $html),
             'replyAll' => array_values(array_unique(array_filter(array_merge([$email['replyTo'][0]['email'] ?? $email['from'][0]['email'] ?? null], array_column($email['to'] ?? [], 'email'), array_column($email['cc'] ?? [], 'email')), fn ($address) => $address && strcasecmp($address, $user->mailbox_address) !== 0))),
             'attachments' => $attachments,
@@ -105,6 +109,43 @@ class MailboxController extends Controller
         $keyword = $data['flag'] === 'read' ? '$seen' : 'kioosk-'.$data['flag'];
         $result = $this->mail->request('Email/set', ['update' => [$id => ['keywords/'.$keyword => $data['value'] ?: null]]], $user);
         abort_if(isset($result['notUpdated'][$id]), 404);
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function organize(Request $request, string $id): JsonResponse
+    {
+        $data = $request->validate([
+            'action' => 'required|in:move,label,unlabel',
+            'destination' => 'required_if:action,move|in:imbox,feed,receipts,trash',
+            'label' => 'required_if:action,label,unlabel|string|max:25',
+        ]);
+        $user = $request->user();
+        abort_unless($user->mail_account_id, 404);
+        $email = $this->mail->request('Email/get', ['ids' => [$id], 'properties' => ['id']], $user)['list'];
+        abort_if(empty($email), 404);
+
+        if ($data['action'] === 'move') {
+            $destination = $data['destination'];
+            $role = match ($destination) {
+                'imbox' => 'inbox',
+                'trash' => 'trash',
+                default => 'archive',
+            };
+            $boxes = collect($this->mail->request('Mailbox/get', ['properties' => ['id', 'role']], $user)['list'])->keyBy('role');
+            abort_unless(isset($boxes[$role]), 422, 'پوشهٔ مقصد در دسترس نیست.');
+            $patch = [
+                'mailboxIds' => [$boxes[$role]['id'] => true],
+                'keywords/kioosk-feed' => $destination === 'feed' ?: null,
+                'keywords/kioosk-receipts' => $destination === 'receipts' ?: null,
+            ];
+        } else {
+            $keyword = 'kioosk-label-'.bin2hex($data['label']);
+            $patch = ['keywords/'.$keyword => $data['action'] === 'label' ?: null];
+        }
+
+        $result = $this->mail->request('Email/set', ['update' => [$id => $patch]], $user);
+        abort_unless(array_key_exists($id, $result['updated'] ?? []), 422, 'تغییر نامه انجام نشد.');
 
         return response()->json(['ok' => true]);
     }
@@ -153,7 +194,7 @@ class MailboxController extends Controller
             'to.*' => $address, 'cc.*' => $address, 'bcc.*' => $address,
             'subject' => $required.'|string|max:300', 'body' => 'nullable|string|max:100000',
             'attachments' => 'nullable|array|max:10', 'attachments.*' => 'required|uuid|distinct',
-            'reply' => 'nullable|string|max:128',
+            'reply' => 'nullable|string|max:128', 'forward' => 'nullable|string|max:128',
             'submission' => $sending ? 'required|uuid' : 'exclude',
         ], ['to.required' => 'دست‌کم یک گیرنده وارد کنید.', '*.email' => 'نشانی یکی از گیرندگان معتبر نیست.']);
     }
@@ -192,8 +233,16 @@ class MailboxController extends Controller
                     $message['references'] = array_slice(array_merge($original['references'] ?? [], $original['messageId']), -20);
                 }
             }
+            $files = [];
+            if (! empty($data['forward'])) {
+                $original = $this->email($request, $data['forward']);
+                $files = array_map(fn ($file) => array_intersect_key($file, array_flip(['blobId', 'type', 'name'])) + ['disposition' => 'attachment'], $original['attachments'] ?? []);
+            }
             if (! empty($data['attachments'])) {
-                $message['attachments'] = $this->uploads->upload($user, $data['attachments']);
+                $files = array_merge($files, $this->uploads->upload($user, $data['attachments']));
+            }
+            if ($files) {
+                $message['attachments'] = $files;
             }
             $new = $this->mail->request('Email/set', ['create' => ['message' => $message]], $user);
             $id = $new['created']['message']['id'] ?? null;
@@ -246,6 +295,10 @@ class MailboxController extends Controller
             'recipient' => implode('، ', array_column($email['to'] ?? [], 'email')),
             'body' => $this->excerpt->make($email['preview'] ?? ''), 'receivedAt' => $email['receivedAt'],
             'folder' => $isSent ? 'sent' : 'imbox', 'read' => isset($flags['$seen']),
+            'labels' => array_values(array_map(
+                fn ($key) => hex2bin(substr($key, 13)),
+                array_filter(array_keys($flags), fn ($key) => preg_match('/^kioosk-label-(?:[0-9a-f]{2})+$/D', $key)),
+            )),
             'later' => isset($flags['kioosk-later']), 'saved' => isset($flags['kioosk-saved']),
             'feed' => isset($flags['kioosk-feed']), 'receipts' => isset($flags['kioosk-receipts']),
             'replyTo' => ($email['replyTo'][0]['email'] ?? null) ?: ($address['email'] ?? ''),

@@ -76,4 +76,39 @@ class MailComposeTest extends TestCase
         $this->postJson('/mail/send', $draft)->assertOk();
         Http::assertSentCount(6);
     }
+
+    public function test_thread_actions_update_only_messages_in_the_signed_in_mailbox(): void
+    {
+        config(['stalwart.url' => 'https://stalwart.example.test']);
+        $user = User::factory()->create(['mailbox_address' => 'owner@kioosk.space']);
+        $user->forceFill(['mail_account_id' => 'account', 'mail_secret' => 'fake'])->save();
+        $patches = [];
+        Http::fake(function (Request $request) use (&$patches) {
+            [$method, $arguments] = $request->data()['methodCalls'][0];
+            $this->assertSame('account', $arguments['accountId']);
+            if ($method === 'Email/set') {
+                $patches[] = $arguments['update']['message'];
+            }
+
+            return Http::response(['methodResponses' => [[$method, match ($method) {
+                'Email/get' => ['list' => $arguments['ids'] === ['message'] ? [['id' => 'message']] : []],
+                'Mailbox/get' => ['list' => [['role' => 'archive', 'id' => 'archive'], ['role' => 'trash', 'id' => 'trash']]],
+                'Email/set' => ['updated' => ['message' => null]],
+            }, 'call']]]);
+        });
+
+        $this->actingAs($user)->postJson('/mail/message/missing/organize', ['action' => 'move', 'destination' => 'trash'])->assertNotFound();
+        $this->postJson('/mail/message/message/organize', ['action' => 'move', 'destination' => 'feed'])->assertOk();
+        $this->postJson('/mail/message/message/organize', ['action' => 'label', 'label' => 'کار'])->assertOk();
+        $this->postJson('/mail/message/message/organize', ['action' => 'unlabel', 'label' => 'کار'])->assertOk();
+        $this->postJson('/mail/message/message/organize', ['action' => 'move', 'destination' => 'trash'])->assertOk();
+
+        $keyword = 'keywords/kioosk-label-'.bin2hex('کار');
+        $this->assertSame([
+            ['mailboxIds' => ['archive' => true], 'keywords/kioosk-feed' => true, 'keywords/kioosk-receipts' => null],
+            [$keyword => true],
+            [$keyword => null],
+            ['mailboxIds' => ['trash' => true], 'keywords/kioosk-feed' => null, 'keywords/kioosk-receipts' => null],
+        ], $patches);
+    }
 }

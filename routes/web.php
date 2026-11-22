@@ -35,6 +35,7 @@ Route::middleware(['auth', 'auth.session'])->group(function (): void {
         Route::get('/mail/message/{id}', [MailboxController::class, 'show']);
         Route::get('/mail/message/{id}/attachment/{blob}', [MailboxController::class, 'attachment'])->name('mail.attachment');
         Route::patch('/mail/message/{id}', [MailboxController::class, 'flag']);
+        Route::post('/mail/message/{id}/organize', [MailboxController::class, 'organize']);
         Route::post('/mail/draft/preview', [MailboxController::class, 'preview'])->middleware('throttle:30,1,mail-preview');
         Route::post('/mail/draft/attachments', [MailboxController::class, 'upload'])->middleware('throttle:25,1,mail-upload');
         Route::delete('/mail/draft/attachments/{id}', [MailboxController::class, 'removeUpload']);

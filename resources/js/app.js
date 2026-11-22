@@ -13,6 +13,10 @@ const icons = {
     search: icon('<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/>'),
     more: icon('<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>'),
     reply: icon('<path d="m14 5 6 6-6 6v-4h-3c-4 0-6 2-7 5v-2a7 7 0 0 1 7-7h3V5Z"/>'),
+    forward: icon('<path d="m14 5 6 6-6 6v-4h-3c-4 0-6 2-7 5v-2a7 7 0 0 1 7-7h3V5Z"/>'),
+    label: icon('<path d="M3 3h8l10 10-8 8L3 11V3Z M7 7h.01"/>'),
+    move: icon('<path d="M3 6h6l2 2h10v12H3z M8 14h8m-3-3 3 3-3 3"/>'),
+    trash: icon('<path d="M3 6h18M9 6V3h6v3M5 6l1 14h12l1-14M10 10v6m4-6v6"/>'),
     chevron: icon('<path d="m6 9 6 6 6-6"/>'),
     back: icon('<path d="m13 6 6 6-6 6m6-6H5"/>'),
 };
@@ -23,10 +27,11 @@ const folders = {
     receipts: { title: 'رسیدها', icon: 'receipt', description: 'رسیدها و تأییدیه‌ها برای مراجعهٔ بعدی.' },
     later: { title: 'پاسخ بعداً', icon: 'clock', description: 'نامه‌هایی که می‌خواهید بعداً پاسخ دهید.' },
     saved: { title: 'کنارگذاشته‌ها', icon: 'bookmark', description: 'نامه‌هایی که می‌خواهید دم دست باشند.' },
+    trash: { title: 'زباله‌دان', icon: 'trash', description: 'نامه‌هایی که به زباله‌دان منتقل کرده‌اید.' },
     sent: { title: 'ارسال‌شده‌ها', icon: 'send', description: 'نامه‌هایی که در نسخهٔ آزمایشی فرستاده‌اید.' },
 };
 
-const emptyDraft = () => ({to: [], cc: [], bcc: [], subject: '', body: '', attachments: [], files: [], reply: null});
+const emptyDraft = () => ({to: [], cc: [], bcc: [], subject: '', body: '', attachments: [], files: [], reply: null, forward: null});
 const number = new Intl.NumberFormat('fa-IR');
 const time = new Intl.DateTimeFormat('fa-IR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
@@ -81,6 +86,12 @@ Alpine.data('mailbox', () => ({
     folderKey: 'imbox',
     query: '',
     selected: null,
+    threadAction: '',
+    threadError: '',
+    threadBusy: false,
+    labelInput: '',
+    destination: 'imbox',
+    forward: new URLSearchParams(location.search).get('forward'),
     headerMenu: null,
     notice: '',
     noticeTimer: null,
@@ -113,7 +124,19 @@ Alpine.data('mailbox', () => ({
             return;
         }
         if (!await this.load()) return;
-        if (this.reply && !this.hasDraft) {
+        if (this.forward && this.hasDraft && this.draft.forward !== this.forward) {
+            this.notify('ابتدا پیش‌نویس فعلی را ارسال یا حذف کنید، سپس دوباره بازارسال را انتخاب کنید.');
+        } else if (this.forward && !this.hasDraft) {
+            try {
+                const original = await mailRequest('message/' + encodeURIComponent(this.forward));
+                const quote = original.text.slice(0, 45000).split('\n').map(line => '> ' + line).join('\n');
+                this.draft = {...emptyDraft(), forward: this.forward, subject: ('بازارسال: ' + original.subject).slice(0, 300),
+                    body: '\n\nفرستنده: ' + original.from + '\nموضوع: ' + original.subject + '\n\n' + quote};
+                this.saveDraft();
+            } catch (error) {
+                this.notify(error.message);
+            }
+        } else if (this.reply && !this.hasDraft) {
             try {
                 const original = await mailRequest('message/' + encodeURIComponent(this.reply));
                 const recipients = this.replyAll ? original.replyAll : [original.replyTo].filter(Boolean);
@@ -271,6 +294,46 @@ Alpine.data('mailbox', () => ({
         } catch (error) {
             this.notify(error.message);
             return false;
+        }
+    },
+    openThreadAction(action) {
+        this.closeHeaderMenu(true);
+        this.threadAction = action;
+        this.threadError = '';
+        this.destination = this.folderKey === 'imbox' ? 'feed' : 'imbox';
+        this.labelInput = '';
+        this.$refs.threadDialog.showModal();
+    },
+    async applyThreadAction(removeLabel = null) {
+        if (this.threadBusy) return;
+        const id = this.selected.id;
+        const action = this.threadAction;
+        this.threadBusy = true;
+        this.threadError = '';
+        try {
+            if (action === 'unread') {
+                await mailRequest('message/' + encodeURIComponent(id), 'PATCH', {flag: 'read', value: false});
+            } else {
+                await mailRequest('message/' + encodeURIComponent(id) + '/organize', 'POST',
+                    action === 'label'
+                        ? {action: removeLabel === null ? 'label' : 'unlabel', label: removeLabel ?? this.labelInput.trim()}
+                        : {action: 'move', destination: action === 'trash' ? 'trash' : this.destination});
+            }
+            if (action === 'label') {
+                this.selected.labels = removeLabel === null
+                    ? [...new Set([...this.selected.labels, this.labelInput.trim()])]
+                    : this.selected.labels.filter(label => label !== removeLabel);
+            }
+            this.$refs.threadDialog.close();
+            if (action !== 'label') {
+                this.closeMessage();
+                await this.load();
+            }
+            this.notify('تغییر نامه ذخیره شد.');
+        } catch (error) {
+            this.threadError = error.message;
+        } finally {
+            this.threadBusy = false;
         }
     },
     async toggleFlag(flag) {

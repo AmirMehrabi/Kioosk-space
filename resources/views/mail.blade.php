@@ -149,13 +149,13 @@
                                     @focusout="if (!$el.contains($event.relatedTarget) && headerMenu === 'message') closeHeaderMenu()">
                                     <button type="button" class="more-toggle" id="message-toggle" aria-label="گزینه‌های نامه"
                                         aria-controls="message-dropdown" :aria-expanded="headerMenu === 'message'"
-                                        @click="toggleHeaderMenu('message')" x-html="icons.more"></button>
+                                        :disabled="selected.loading" @click="toggleHeaderMenu('message')" x-html="icons.more"></button>
                                     <div class="message-dropdown" id="message-dropdown" x-show="headerMenu === 'message'">
-                                        <button type="button" @click="toggleFlag('later')"><span x-html="icons.clock"></span><span x-text="selected.later ? 'برداشتن از پاسخ بعداً' : 'پاسخ بعداً'"></span></button>
-                                        <button type="button" @click="toggleFlag('saved')"><span x-html="icons.bookmark"></span><span x-text="selected.saved ? 'برداشتن از کنارگذاشته‌ها' : 'کنار بگذار'"></span></button>
-                                        <button type="button" @click="toggleFlag('feed')" x-text="selected.feed ? 'برداشتن از خواندنی‌ها' : 'افزودن به خواندنی‌ها'"></button>
-                                        <button type="button" @click="toggleFlag('receipts')" x-text="selected.receipts ? 'برداشتن از رسیدها' : 'افزودن به رسیدها'"></button>
-                                        <button type="button" @click="if (await setFlag('read', false)) closeMessage()"><span x-html="icons.inbox"></span> نشان‌گذاری به‌عنوان خوانده‌نشده</button>
+                                        <a :href="composeUrl + '?forward=' + encodeURIComponent(selected.id)"><span x-html="icons.forward"></span> بازارسال</a>
+                                        <button type="button" @click="openThreadAction('label')"><span x-html="icons.label"></span> برچسب‌ها</button>
+                                        <button type="button" @click="openThreadAction('move')"><span x-html="icons.move"></span> انتقال به پوشه</button>
+                                        <button type="button" @click="openThreadAction('unread')"><span x-html="icons.inbox"></span> نشان‌گذاری به‌عنوان خوانده‌نشده</button>
+                                        <button type="button" class="trash-action" x-show="folderKey !== 'trash'" @click="openThreadAction('trash')"><span x-html="icons.trash"></span> انتقال به زباله‌دان</button>
                                     </div>
                                 </div>
                                 <time x-text="selected.time"></time>
@@ -176,6 +176,42 @@
                             </template>
                         </div>
                     </article>
+                    <ul class="thread-labels" x-show="selected.labels?.length" aria-label="برچسب‌ها">
+                        <template x-for="label in selected.labels ?? []" :key="label">
+                            <li dir="auto" x-text="label"></li>
+                        </template>
+                    </ul>
+                    <dialog class="paper compose-dialog thread-dialog" x-ref="threadDialog" aria-labelledby="thread-action-title" @cancel="if (threadBusy) $event.preventDefault()">
+                        <h2 id="thread-action-title" x-text="{label: 'برچسب‌های نامه', move: 'انتقال نامه', unread: 'نامه خوانده‌نشده شود؟', trash: 'نامه به زباله‌دان منتقل شود؟'}[threadAction]"></h2>
+                        <form @submit.prevent="applyThreadAction()">
+                            <fieldset :disabled="threadBusy">
+                                <template x-if="threadAction === 'label'">
+                                    <div>
+                                        <template x-for="label in selected.labels ?? []" :key="label">
+                                            <button type="button" class="secondary" @click="applyThreadAction(label)" :aria-label="'حذف برچسب ' + label"><bdi x-text="label"></bdi> ×</button>
+                                        </template>
+                                        <label for="thread-label">برچسب جدید</label>
+                                        <input id="thread-label" dir="auto" maxlength="25" required x-model="labelInput">
+                                    </div>
+                                </template>
+                                <template x-if="threadAction === 'move'">
+                                    <div>
+                                        <label for="thread-destination">پوشهٔ مقصد</label>
+                                        <select id="thread-destination" x-model="destination">
+                                            <option value="imbox">نامه‌های مهم</option>
+                                            <option value="feed">خواندنی‌ها</option>
+                                            <option value="receipts">رسیدها</option>
+                                        </select>
+                                    </div>
+                                </template>
+                                <p x-show="threadError" role="alert" x-text="threadError"></p>
+                                <div class="actions">
+                                    <button type="button" class="secondary" autofocus @click="$refs.threadDialog.close()">بازگشت</button>
+                                    <button class="primary" type="submit" x-text="threadAction === 'label' ? 'افزودن برچسب' : 'تأیید'"></button>
+                                </div>
+                            </fieldset>
+                        </form>
+                    </dialog>
                     <div class="thread-replies">
                         <a class="reply-tile" :href="composeUrl + '?reply=' + encodeURIComponent(selected.id)">
                             <span x-html="icons.reply"></span> پاسخ دادن
@@ -194,6 +230,7 @@
                         <x-mail-spinner x-show="loading" />
                         <form class="paper composer" :inert="loading || Boolean(loadError)" :class="{'composer-loading': loading}" @submit.prevent="send">
                             <fieldset :disabled="busy">
+                                <p class="forward-note" x-show="draft.forward">متن و پیوست‌های نامهٔ اصلی همراه بازارسال فرستاده می‌شوند.</p>
                                 @foreach (['to' => 'گیرنده', 'cc' => 'رونوشت', 'bcc' => 'رونوشت پنهان'] as $field => $label)
                                     <div class="field recipient-field" x-show="{{ $field === 'to' ? 'true' : $field.'Open' }}">
                                         <label for="recipient-{{ $field }}">{{ $label }}</label>
