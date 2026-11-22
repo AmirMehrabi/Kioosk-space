@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="description" content="کیوسک، صندوق نامهٔ فارسی برای خواندن، مرتب کردن و پاسخ دادن به ایمیل‌ها.">
-    <meta name="theme-color" content="#fdfcfb">
+    <meta name="theme-color" content="#fefdfb">
     <meta property="og:type" content="website">
     <meta property="og:title" content="کیوسک | نامه‌های مهم، دم دست">
     <meta property="og:description" content="کیوسک، صندوق نامهٔ فارسی برای خواندن، مرتب کردن و پاسخ دادن به ایمیل‌ها.">
@@ -27,9 +27,9 @@
         <nav aria-label="صفحهٔ اصلی">
             <a class="landing-nav-link" href="#folders">صندوق چطور کار می‌کند؟</a>
             @auth
-                <a class="landing-button landing-button-quiet" href="{{ route('imbox', absolute: false) }}">باز کردن صندوق</a>
+                <a class="secondary landing-button" href="{{ route('imbox', absolute: false) }}">باز کردن صندوق</a>
             @else
-                <a class="landing-button landing-button-quiet" href="{{ route('login', absolute: false) }}">ورود</a>
+                <a class="secondary landing-button" href="{{ route('login', absolute: false) }}">ورود</a>
             @endauth
         </nav>
     </header>
@@ -39,17 +39,17 @@
             <div class="landing-hero-grid">
                 <div class="landing-intro">
                     <h1 id="landing-title">همهٔ نامه‌ها <em>فوری نیستند.</em></h1>
-                    <p>کیوسک یک صندوق نامهٔ فارسی است. نامه‌های مهم را همین حالا ببینید، خبرنامه‌ها را سر فرصت بخوانید و رسیدها را وقتی لازم شد پیدا کنید.</p>
+                    <p>کیوسک یک صندوق نامهٔ فارسی است. نامه‌های مهم را زودتر ببینید، خبرنامه‌ها را سر فرصت بخوانید و رسیدها را هر وقت لازم شد پیدا کنید.</p>
                     <div class="hero-actions">
                         @auth
-                            <a class="landing-button" href="{{ route('imbox', absolute: false) }}">باز کردن صندوق</a>
+                            <a class="primary landing-button" href="{{ route('imbox', absolute: false) }}">باز کردن صندوق</a>
                         @else
-                            <a class="landing-button" href="{{ route('register', absolute: false) }}">نشانی خود را بسازید</a>
+                            <a class="primary landing-button" href="{{ route('register', absolute: false) }}">نشانی خود را بسازید</a>
                         @endauth
-                        <button type="button" class="landing-button landing-button-quiet" aria-haspopup="dialog"
-                            x-cloak @click="$refs.preview.showModal()">پیش‌نمایش</button>
+                        <button type="button" class="secondary landing-button" aria-haspopup="dialog"
+                            x-cloak @click="$refs.preview.showModal()">پیش‌نمایش صندوق</button>
                     </div>
-                    <small>نشانی شخصی شما در <bdi>@kioosk.space</bdi></small>
+                    <small>نشانی شخصی شما در <bdi dir="ltr">@kioosk.space</bdi></small>
                 </div>
                 <div class="hero-stage">
                     <div class="landing-preview" aria-hidden="true">
@@ -71,13 +71,14 @@
             <dialog class="landing-dialog" x-ref="preview" aria-labelledby="preview-heading">
                 <div class="dialog-header">
                     <h2 id="preview-heading">پیش‌نمایش صندوق کیوسک</h2>
-                    <form method="dialog"><button type="submit" class="landing-button landing-button-quiet" autofocus>بستن</button></form>
+                    <form method="dialog"><button type="submit" class="secondary landing-button" autofocus>بستن</button></form>
                 </div>
-                <p>نمایی از پوشه‌های صندوق کیوسک. برای باز کردن صندوق خود، وارد حساب شوید.</p>
+                <p>ببینید در هر بخش از صندوق چه نامه‌هایی پیدا می‌کنید.</p>
                 <div class="dialog-folders">
                     <a href="{{ route('imbox', absolute: false) }}"><strong>نامه‌های مهم</strong><span>نسخهٔ نهایی طرح‌ها آماده شد</span></a>
                     <a href="{{ route('imbox', absolute: false) }}#feed"><strong>خواندنی‌ها</strong><span>سه خواندنی برای آبان</span></a>
                     <a href="{{ route('imbox', absolute: false) }}#receipts"><strong>رسیدها</strong><span>تأیید سفارش کتاب</span></a>
+                    <a href="{{ route('imbox', absolute: false) }}#later"><strong>پاسخ بعداً</strong><span>یادداشت‌های جلسهٔ طراحی</span></a>
                 </div>
             </dialog>
         </section>
@@ -92,7 +93,7 @@
         <section class="landing-feature feature-important" id="important" aria-labelledby="important-heading">
             <div class="landing-wrap">
                 <h2 id="important-heading">اول، نامه‌هایی که <em>مهم‌اند.</em></h2>
-                <p>تازه‌ها بالای صندوق می‌مانند. همین که نامه‌ای را باز کنید، به «دیده‌شده‌ها» می‌رود و جایش برای نامهٔ بعدی باز می‌شود.</p>
+                <p>نامه‌های تازه بالای صندوق می‌مانند. بعد از باز کردن هر نامه، آن را در «دیده‌شده‌ها» پیدا می‌کنید.</p>
                 <div class="landing-preview" aria-hidden="true">
                     <div class="preview-header"><span>نامه‌های مهم</span><strong>کیوسک</strong><span class="preview-user">آ</span></div>
                     <div class="preview-body">
@@ -157,9 +158,9 @@
                 <h2>یک نامه را باز کنید.</h2>
                 <p>نشانی خودتان را بسازید و اولین نامه را از صندوق کیوسک بفرستید.</p>
                 @auth
-                    <a class="landing-button" href="{{ route('imbox', absolute: false) }}">ورود به صندوق</a>
+                    <a class="primary landing-button" href="{{ route('imbox', absolute: false) }}">ورود به صندوق</a>
                 @else
-                    <a class="landing-button" href="{{ route('register', absolute: false) }}">ساخت حساب کیوسک</a>
+                    <a class="primary landing-button" href="{{ route('register', absolute: false) }}">ساخت حساب کیوسک</a>
                 @endauth
             </div>
         </section>

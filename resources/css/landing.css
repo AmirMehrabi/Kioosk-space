@@ -1,5 +1,9 @@
 .landing {
-    color: var(--ink);
+    --canvas: #fefdfb;
+    --border: var(--paper-line);
+    --subtle: #f8f6f2;
+    --subtle-hover: #f0ece5;
+    color: var(--navy);
     background: var(--canvas);
     display: flow-root;
 }
@@ -15,16 +19,18 @@
 .landing-logo { width: clamp(120px, 18vw, 150px); height: auto; }
 .landing-footer-brand img { width: 96px; height: auto; }
 .landing-header nav { display: flex; align-items: center; gap: clamp(10px, 3vw, 34px); }
-.landing-header .landing-button { min-height: 48px; padding-inline: 20px; border-radius: 28px; }
+.landing-header .landing-button { min-height: 48px; padding-inline: 20px; }
 .landing-nav-link { color: var(--muted); padding-block: 13px; font-size: 15px; font-weight: 650; }
 .landing-nav-link:hover { text-decoration: underline; }
-.landing-button {
-    display: inline-flex; align-items: center; justify-content: center; min-height: 46px;
-    padding: 9px 19px; font-weight: 800; border-radius: 11px; color: #fff; background: var(--blue);
+.landing-button.primary {
+    --button-depth: 4px;
+    min-height: 62px;
+    padding-inline: 24px;
+    font-size: 18px;
+    font-weight: 900;
 }
-.landing-button:hover { background: var(--blue-hover); }
-.landing-button-quiet { min-height: 44px; color: #124479; background: var(--subtle); font-size: 14px; }
-.landing-button-quiet:hover { background: var(--subtle-hover); }
+.landing-button.secondary { background: var(--subtle); }
+.landing-button.secondary:hover { background: var(--subtle-hover); }
 .landing-hero {
     width: min(1200px, calc(100% - 48px)); border: 1px solid var(--border); border-radius: 30px;
     background: var(--surface); box-shadow: var(--surface-shadow);
