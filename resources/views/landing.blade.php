@@ -21,11 +21,8 @@
     <a class="skip-link" href="#landing-content">رفتن به محتوای اصلی</a>
     <header class="landing-header">
         <a class="landing-brand" href="{{ route('landing', absolute: false) }}">
-            <picture>
-                <source media="print" srcset="{{ asset('kioosk-logos/kioosk-logo-horizontal-bilingual-monochrome.png') }}">
-                <img class="landing-logo" src="{{ asset('kioosk-logos/kioosk-logo-horizontal-bilingual.png') }}"
-                    width="2172" height="724" alt="کیوسک | Kioosk">
-            </picture>
+            <img class="landing-logo" src="{{ asset('kioosk-logos/kioosk-logo-horizontal-persian.png') }}"
+                width="1050" height="356" alt="کیوسک">
         </a>
         <nav aria-label="صفحهٔ اصلی">
             <a class="landing-nav-link" href="#folders">صندوق چطور کار می‌کند؟</a>
