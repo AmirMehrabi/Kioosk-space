@@ -13,7 +13,7 @@
     <title>کیوسک | نامه‌ها</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
-<body x-data="mailbox"
+<body x-data="mailbox" @click="leaveComposer"
     data-account-id="{{ $account->getKey() }}"
     data-account-name="{{ $account->name }}"
     data-account-email="{{ $mailboxAddress }}"
@@ -86,7 +86,7 @@
 
     <div class="workspace">
         <main class="content" id="main-content" tabindex="-1">
-            <div class="empty" x-show="loadError" role="alert"><p x-text="loadError"></p><button class="secondary" @click="load()">تلاش دوباره</button></div>
+            <div class="empty" x-show="loadError" role="alert"><p x-text="loadError"></p><button class="secondary" @click="compose ? openComposer() : load()">تلاش دوباره</button></div>
             <template x-if="!compose && !selected">
                 <div>
                     <section class="intro" :class="{'hero': folderKey === 'imbox' && !query}">
@@ -225,8 +225,9 @@
 
             <template x-if="compose">
                 <section class="compose-page">
-                    <div class="compose-heading"><div class="heading-icon" x-html="icons.edit"></div><div><h1>نامهٔ جدید</h1><p dir="ltr">{{ $mailboxAddress }}</p></div></div>
+                    <div class="compose-heading"><div class="heading-icon" x-html="icons.edit"></div><div><h1 x-text="reply ? (replyAll ? 'پاسخ به همه' : 'پاسخ به نامه') : (forward ? 'بازارسال نامه' : 'نامهٔ جدید')"></h1><p dir="ltr">{{ $mailboxAddress }}</p></div></div>
                     <div class="composer-region">
+                        <a class="secondary recover-draft" x-show="hasLegacyDraft && !reply && !forward" :href="composeUrl + '?recover=1'">باز کردن پیش‌نویس قبلی</a>
                         <x-mail-spinner x-show="loading" />
                         <form class="paper composer" :inert="loading || Boolean(loadError)" :class="{'composer-loading': loading}" @submit.prevent="send">
                             <fieldset :disabled="busy">
@@ -263,16 +264,21 @@
                                     </div>
                                 @endforeach
                                 <label class="field"><span>موضوع</span><input required dir="auto" maxlength="300" placeholder="موضوع نامه" x-model="draft.subject" @input="saveDraft"></label>
-                                <div class="format-toolbar" role="group" aria-label="قالب‌بندی نامه">
+                                <div class="format-toolbar" role="group" aria-label="قالب‌بندی نامه" @mousedown.prevent="rememberSelection">
                                     <button type="button" aria-label="پررنگ" @click="format('bold')"><strong>B</strong></button>
                                     <button type="button" aria-label="مورب" @click="format('italic')"><em>I</em></button>
-                                    <button type="button" @click="format('link')">پیوند</button>
-                                    <button type="button" @click="format('list')">فهرست</button>
-                                    <button type="button" @click="format('quote')">نقل‌قول</button>
-                                    <button type="button" class="format-preview" :aria-pressed="previewOpen" @click="togglePreview" x-text="previewOpen ? 'بازگشت به ویرایش' : 'پیش‌نمایش'"></button>
+                                    <button type="button" @click="openLinkEditor">پیوند</button>
+                                    <button type="button" @click="format('insertUnorderedList')">فهرست</button>
+                                    <button type="button" @click="format('formatBlock', 'blockquote')">نقل‌قول</button>
                                 </div>
-                                <textarea x-ref="editor" dir="auto" aria-label="متن نامه" placeholder="متن نامه را اینجا بنویسید…" x-show="!previewOpen" x-model="draft.body" @input="saveDraft"></textarea>
-                                <div class="compose-preview message-rich" dir="auto" x-show="previewOpen" x-html="previewHtml"></div>
+                                <div class="compose-editor message-rich" x-ref="editor" dir="auto" role="textbox" aria-multiline="true" aria-label="متن نامه"
+                                    :contenteditable="!busy" :data-empty="editorEmpty" data-placeholder="متن نامه را اینجا بنویسید…"
+                                    @input="editorChanged" @focusout="rememberSelection" @paste.prevent="pasteEditor" @drop.prevent></div>
+                                <details class="reply-quote" x-show="draft.quote">
+                                    <summary>نمایش متن نامهٔ اصلی</summary>
+                                    <p x-text="draft.quote?.attribution"></p>
+                                    <blockquote class="message-rich" dir="auto" x-html="draft.quote?.html ?? ''"></blockquote>
+                                </details>
                                 <div class="compose-attachments" @dragover.prevent @drop.prevent="addFiles($event.dataTransfer.files)">
                                     <div class="attachments-toolbar">
                                         <input type="file" multiple x-ref="filePicker" hidden @change="addFiles($event.target.files); $event.target.value = ''">
@@ -301,6 +307,19 @@
                                 </div>
                             </fieldset>
                         </form>
+                        <dialog class="paper compose-dialog link-dialog" x-ref="linkDialog" aria-labelledby="link-heading">
+                            <h2 id="link-heading">افزودن پیوند</h2>
+                            <form @submit.prevent="insertLink">
+                                <label for="editor-link">نشانی پیوند</label>
+                                <input id="editor-link" dir="ltr" type="text" inputmode="url" placeholder="https://example.com"
+                                    x-model="editorLink" autofocus required>
+                                <small class="recipient-error" x-show="editorLinkError" role="alert" x-text="editorLinkError"></small>
+                                <div class="actions">
+                                    <button class="primary">افزودن</button>
+                                    <button class="secondary" type="button" @click="$refs.linkDialog.close()">بازگشت</button>
+                                </div>
+                            </form>
+                        </dialog>
                         <dialog class="paper compose-dialog" x-ref="discard" aria-labelledby="discard-heading">
                             <h2 id="discard-heading">پیش‌نویس پاک شود؟</h2>
                             <p>متن، گیرنده‌ها و پیوست‌های این پیش‌نویس پاک می‌شوند.</p>

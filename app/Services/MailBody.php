@@ -19,13 +19,13 @@ class MailBody
     public function render(string $text, string $html): string
     {
         if (trim($html) !== '') {
-            $result = $this->sanitize($html);
+            $result = $this->richText($html);
             if ($result !== '') {
                 return $result;
             }
         }
 
-        return $this->sanitize(Str::markdown($text, [
+        return $this->richText(Str::markdown($text, [
             'html_input' => 'escape',
             'allow_unsafe_links' => false,
             'max_nesting_level' => 25,
@@ -41,7 +41,7 @@ class MailBody
         return trim(preg_replace('/\n{3,}/', "\n\n", $text));
     }
 
-    private function sanitize(string $html): string
+    public function richText(string $html): string
     {
         if (trim($html) === '') {
             return '';

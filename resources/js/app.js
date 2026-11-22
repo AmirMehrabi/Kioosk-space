@@ -31,13 +31,47 @@ const folders = {
     sent: { title: 'ارسال‌شده‌ها', icon: 'send', description: 'نامه‌هایی که در نسخهٔ آزمایشی فرستاده‌اید.' },
 };
 
-const emptyDraft = () => ({to: [], cc: [], bcc: [], subject: '', body: '', attachments: [], files: [], reply: null, forward: null});
+const emptyDraft = () => ({to: [], cc: [], bcc: [], subject: '', bodyHtml: '', attachments: [], files: [], reply: null, forward: null, quote: null});
 const number = new Intl.NumberFormat('fa-IR');
 const time = new Intl.DateTimeFormat('fa-IR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
+const mailLink = /^(?:https?:\/\/|mailto:)[^\s\x00-\x1f]+$/i;
+const clipboardTags = new Set([
+    'a', 'b', 'blockquote', 'br', 'code', 'div', 'em', 'i', 'li', 'ol', 'p', 'pre', 's', 'strong', 'u', 'ul',
+]);
+const clipboardIgnored = new Set(['head', 'script', 'style', 'svg', 'math', 'iframe', 'object', 'embed', 'template']);
+
+function clipboardMarkup(html) {
+    const template = document.createElement('template');
+    template.innerHTML = html;
+    const clean = document.createElement('div');
+    const copy = (source, target) => {
+        for (const child of source.childNodes) {
+            if (child.nodeType === Node.TEXT_NODE) {
+                target.append(document.createTextNode(child.textContent));
+            } else if (child.nodeType === Node.ELEMENT_NODE && !clipboardIgnored.has(child.localName) && !child.hidden) {
+                if (!clipboardTags.has(child.localName)) {
+                    copy(child, target);
+                    continue;
+                }
+                const element = document.createElement(child.localName);
+                const dir = child.getAttribute('dir')?.toLowerCase();
+                const href = child.getAttribute('href')?.trim();
+                if (['auto', 'ltr', 'rtl'].includes(dir)) element.dir = dir;
+                if (child.localName === 'a' && href && mailLink.test(href)) element.setAttribute('href', href);
+                copy(child, element);
+                target.append(element);
+            }
+        }
+    };
+    copy(template.content, clean);
+    return clean.innerHTML;
+}
+
 const spinnerVisible = () => new Promise(resolve => setTimeout(resolve, 450));
 
-async function mailRequest(path, method = 'GET', payload) {
+async function mailRequest(path, method = 'GET', payload, keepalive = false) {
+    const body = payload === undefined ? undefined : JSON.stringify(payload);
     const response = await fetch('/mail/' + path, {
         method,
         headers: {
@@ -45,8 +79,10 @@ async function mailRequest(path, method = 'GET', payload) {
             'Content-Type': 'application/json',
             'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content,
         },
-        body: payload === undefined ? undefined : JSON.stringify(payload),
+        body,
+        keepalive: keepalive && new Blob([body]).size < 60000,
     });
+    if (response.status === 204) return null;
     const data = await response.json();
     if (!response.ok) throw new Error(response.status === 401 || response.status === 419
         ? 'برای ادامه دوباره وارد حساب شوید.'
@@ -75,8 +111,15 @@ Alpine.data('mailbox', () => ({
     uploading: null,
     uploadRequest: null,
     draftStatus: '',
-    previewHtml: '',
-    previewOpen: false,
+    draftId: null,
+    draftRevision: 0,
+    draftDirty: false,
+    draftSaving: null,
+    hasLegacyDraft: false,
+    editorSelection: null,
+    editorLink: '',
+    editorLinkError: '',
+    editorEmpty: true,
     get compose() {
         return this.$root.dataset.composing === 'true';
     },
@@ -102,8 +145,6 @@ Alpine.data('mailbox', () => ({
     loadVersion: 0,
     draftTimer: null,
     searchTimer: null,
-    draftWrite: Promise.resolve(),
-    submission: sessionStorage.getItem('kioosk.submission'),
     reply: new URLSearchParams(location.search).get('reply'),
     replyAll: new URLSearchParams(location.search).get('all') === '1',
 
@@ -123,28 +164,44 @@ Alpine.data('mailbox', () => ({
             }, 30000);
             return;
         }
-        if (!await this.load()) return;
-        if (this.forward && this.hasDraft && this.draft.forward !== this.forward) {
-            this.notify('ابتدا پیش‌نویس فعلی را ارسال یا حذف کنید، سپس دوباره بازارسال را انتخاب کنید.');
-        } else if (this.forward && !this.hasDraft) {
-            try {
-                const original = await mailRequest('message/' + encodeURIComponent(this.forward));
-                const quote = original.text.slice(0, 45000).split('\n').map(line => '> ' + line).join('\n');
-                this.draft = {...emptyDraft(), forward: this.forward, subject: ('بازارسال: ' + original.subject).slice(0, 300),
-                    body: '\n\nفرستنده: ' + original.from + '\nموضوع: ' + original.subject + '\n\n' + quote};
-                this.saveDraft();
-            } catch (error) {
-                this.notify(error.message);
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && !this.busy && this.draftDirty) this.writeDraft(true);
+        });
+        await this.openComposer();
+    },
+    async openComposer() {
+        const params = new URLSearchParams(location.search);
+        this.loading = true;
+        this.loadError = '';
+        try {
+            const {id, revision, draft, hasLegacyDraft} = await mailRequest('draft/open', 'POST', {
+                reply: this.reply, forward: this.forward, all: this.replyAll,
+                ...(params.get('recover') === '1' ? {recover: true} : {}),
+            });
+            this.draftId = id;
+            this.draftRevision = revision;
+            this.draft = {...emptyDraft(), ...draft};
+            this.draft.subject ??= '';
+            this.ccOpen = this.draft.cc.length > 0;
+            this.bccOpen = this.draft.bcc.length > 0;
+            this.hasLegacyDraft = hasLegacyDraft;
+            this.loading = false;
+            await this.$nextTick();
+            const editor = this.$refs.editor;
+            editor.innerHTML = this.draft.bodyHtml;
+            this.editorEmpty = !editor.textContent.trim();
+            document.execCommand('defaultParagraphSeparator', false, 'p');
+            document.execCommand('styleWithCSS', false, false);
+            if (this.reply && document.activeElement === document.body) {
+                editor.focus();
+                const selection = window.getSelection();
+                selection.selectAllChildren(editor);
+                selection.collapseToEnd();
             }
-        } else if (this.reply && !this.hasDraft) {
-            try {
-                const original = await mailRequest('message/' + encodeURIComponent(this.reply));
-                const recipients = this.replyAll ? original.replyAll : [original.replyTo].filter(Boolean);
-                this.draft = {...emptyDraft(), to: recipients, subject: 'پاسخ: ' + original.subject, reply: this.reply};
-                this.saveDraft();
-            } catch (error) {
-                this.notify(error.message);
-            }
+        } catch (error) {
+            this.loadError = error.message;
+        } finally {
+            this.loading = false;
         }
     },
     get splitInbox() {
@@ -168,18 +225,6 @@ Alpine.data('mailbox', () => ({
 
                 messages.push(...data.messages.map(message => ({...message, time: time.format(new Date(message.receivedAt))})));
                 pages[key] = {more: data.more, position: position + data.messages.length};
-                if (this.compose) {
-                this.draft = {...emptyDraft(), ...data.draft};
-                for (const field of ['to', 'cc', 'bcc']) {
-                    this.draft[field] = Array.isArray(this.draft[field]) ? this.draft[field] : [this.draft[field]].filter(Boolean);
-                }
-                this.draft.subject ??= '';
-                this.draft.body ??= '';
-                this.draft.attachments ??= [];
-                this.draft.files ??= [];
-                this.ccOpen = this.draft.cc.length > 0;
-                this.bccOpen = this.draft.bcc.length > 0;
-            }
             }
             if (minimumDisplay) await minimumDisplay;
             if (version !== this.loadVersion) return false;
@@ -349,7 +394,7 @@ Alpine.data('mailbox', () => ({
     },
     get hasDraft() {
         return Boolean(this.draft.to.length || this.draft.cc.length || this.draft.bcc.length ||
-            this.draft.subject || this.draft.body || this.draft.attachments.length);
+            this.draft.subject || !this.editorEmpty || this.draft.attachments.length);
     },
     commitRecipients(field) {
         const value = this.recipientInputs[field].trim();
@@ -381,35 +426,71 @@ Alpine.data('mailbox', () => ({
         this.recipientInputs[field] += ' ' + text;
         this.commitRecipients(field);
     },
-    format(kind) {
+    editorChanged() {
         const editor = this.$refs.editor;
-        const {selectionStart: start, selectionEnd: end} = editor;
-        const selected = this.draft.body.slice(start, end);
-        const formatted = {
-            bold: () => '**' + (selected || 'متن') + '**',
-            italic: () => '_' + (selected || 'متن') + '_',
-            link: () => '[' + (selected || 'نام پیوند') + '](https://example.com)',
-            list: () => '\n' + (selected || 'مورد').split('\n').map(line => '- ' + line).join('\n') + '\n',
-            quote: () => '\n' + (selected || 'نقل‌قول').split('\n').map(line => '> ' + line).join('\n') + '\n',
-        }[kind]();
-        this.draft.body = this.draft.body.slice(0, start) + formatted + this.draft.body.slice(end);
-        this.$nextTick(() => {
-            editor.focus();
-            editor.setSelectionRange(start, start + formatted.length);
-        });
-        this.saveDraft();
+        this.editorEmpty = !editor.textContent.trim();
+        const html = this.editorEmpty ? '' : editor.innerHTML;
+        if (this.draft.bodyHtml !== html) {
+            this.draft.bodyHtml = html;
+            this.saveDraft();
+        }
     },
-    async togglePreview() {
-        if (this.previewOpen) {
-            this.previewOpen = false;
+    rememberSelection() {
+        const selection = window.getSelection();
+        if (selection.rangeCount && this.$refs.editor.contains(selection.anchorNode) &&
+            this.$refs.editor.contains(selection.focusNode)) {
+            this.editorSelection = selection.getRangeAt(0).cloneRange();
+        }
+    },
+    restoreSelection() {
+        const editor = this.$refs.editor;
+        editor.focus();
+        if (this.editorSelection && editor.contains(this.editorSelection.commonAncestorContainer)) {
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(this.editorSelection);
+        }
+    },
+    format(command, value = null) {
+        this.restoreSelection();
+        document.execCommand(command, false, value);
+        this.rememberSelection();
+        this.editorChanged();
+    },
+    pasteEditor(event) {
+        const rawHtml = event.clipboardData?.getData('text/html') ?? '';
+        const html = rawHtml && clipboardMarkup(rawHtml);
+        if (html) {
+            document.execCommand('insertHTML', false, html);
+        } else {
+            document.execCommand('insertText', false, event.clipboardData?.getData('text/plain') ?? '');
+        }
+        this.editorChanged();
+    },
+    openLinkEditor() {
+        this.rememberSelection();
+        this.editorLink = '';
+        this.editorLinkError = '';
+        this.$refs.linkDialog.showModal();
+    },
+    insertLink() {
+        const href = this.editorLink.trim();
+        if (!mailLink.test(href)) {
+            this.editorLinkError = 'نشانی پیوند را با https:// یا mailto: وارد کنید.';
             return;
         }
-        try {
-            this.previewHtml = (await mailRequest('draft/preview', 'POST', {body: this.draft.body})).html;
-            this.previewOpen = true;
-        } catch (error) {
-            this.notify(error.message);
+        this.$refs.linkDialog.close();
+        this.restoreSelection();
+        if (window.getSelection().isCollapsed) {
+            const link = document.createElement('a');
+            link.setAttribute('href', href);
+            link.textContent = href;
+            this.format('insertHTML', link.outerHTML);
+        } else {
+            this.format('createLink', href);
         }
+        if (window.getSelection().rangeCount) window.getSelection().collapseToEnd();
+        this.rememberSelection();
     },
     async addFiles(files) {
         if (this.uploading || this.busy) return;
@@ -424,7 +505,8 @@ Alpine.data('mailbox', () => ({
                 const result = await this.uploadFile(file);
                 this.draft.files.push(result);
                 this.draft.attachments.push(result.id);
-                await this.writeDraft();
+                this.saveDraft();
+                if (!await this.writeDraft()) break;
             } catch (error) {
                 this.notify(error.message);
                 break;
@@ -440,7 +522,7 @@ Alpine.data('mailbox', () => ({
             this.uploadRequest = xhr;
             const form = new FormData();
             form.append('file', file);
-            xhr.open('POST', '/mail/draft/attachments');
+            xhr.open('POST', '/mail/draft/' + this.draftId + '/attachments');
             xhr.setRequestHeader('Accept', 'application/json');
             xhr.setRequestHeader('X-CSRF-TOKEN', document.querySelector('meta[name=csrf-token]').content);
             xhr.upload.onprogress = event => {
@@ -457,46 +539,68 @@ Alpine.data('mailbox', () => ({
     async removeFile(id) {
         this.draft.attachments = this.draft.attachments.filter(item => item !== id);
         this.draft.files = this.draft.files.filter(file => file.id !== id);
+        this.saveDraft();
         await this.writeDraft();
-        await this.deleteUpload(id);
-    },
-    async deleteUpload(id) {
-        try {
-            const response = await fetch('/mail/draft/attachments/' + encodeURIComponent(id), {
-                method: 'DELETE', headers: {'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content},
-            });
-            if (!response.ok) this.notify('پیوست حذف نشد.');
-        } catch {
-            this.notify('پیوست حذف نشد.');
-        }
     },
     saveDraft() {
+        this.draftDirty = true;
+        this.draftStatus = 'در انتظار ذخیره…';
         clearTimeout(this.draftTimer);
         this.draftTimer = setTimeout(() => this.writeDraft(), 400);
     },
-    writeDraft() {
+    async writeDraft(keepalive = false) {
         clearTimeout(this.draftTimer);
-        const {files, ...draft} = this.draft;
-        const snapshot = JSON.parse(JSON.stringify(draft));
+        if (this.draftSaving) {
+            if (!await this.draftSaving) return false;
+            return this.writeDraft(keepalive);
+        }
+        if (!this.draftDirty || !this.draftId) return true;
+
+        const {to, cc, bcc, subject, bodyHtml, attachments} = this.draft;
+        this.draftDirty = false;
         this.draftStatus = 'در حال ذخیره…';
-        this.draftWrite = this.draftWrite.then(async () => {
-            await mailRequest('draft', 'PUT', snapshot);
-            this.draftStatus = 'پیش‌نویس ذخیره شد';
+        this.draftSaving = mailRequest('draft/' + this.draftId, 'PUT', {
+            to, cc, bcc, subject, bodyHtml, attachments, revision: this.draftRevision,
+        }, keepalive).then(({revision}) => {
+            this.draftRevision = revision;
+            this.draftStatus = this.draftDirty ? 'در انتظار ذخیره…' : 'پیش‌نویس ذخیره شد';
+            return true;
         }).catch(error => {
+            this.draftDirty = true;
             this.draftStatus = 'پیش‌نویس ذخیره نشد';
             this.notify(error.message);
+            return false;
+        }).finally(() => {
+            this.draftSaving = null;
         });
-        return this.draftWrite;
+        return this.draftSaving;
+    },
+    async leaveComposer(event) {
+        if (!this.compose || event.defaultPrevented || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+        const link = event.target.closest('a[href]');
+        if (!link || link.target || !link.href.startsWith(location.origin + '/') || link.hash === '#main-content') return;
+        if (this.busy || this.uploading) {
+            event.preventDefault();
+            return;
+        }
+        event.preventDefault();
+        for (const field of ['to', 'cc', 'bcc']) this.commitRecipients(field);
+        if (await this.writeDraft()) location.assign(link.href);
     },
     async discardDraft() {
-        const ids = [...this.draft.attachments];
-        this.draft = emptyDraft();
-        this.recipientInputs = {to: '', cc: '', bcc: ''};
-        this.recipientErrors = {};
-        this.previewOpen = false;
-        await this.writeDraft();
-        await Promise.all(ids.map(id => this.deleteUpload(id)));
-        this.draftStatus = '';
+        if (this.busy || this.uploading) return;
+        this.busy = true;
+        clearTimeout(this.draftTimer);
+        try {
+            await this.draftSaving;
+            await mailRequest('draft/' + this.draftId, 'DELETE', {revision: this.draftRevision});
+            this.draftDirty = false;
+            location.assign(this.folderUrl('imbox'));
+        } catch (error) {
+            this.notify(error.message);
+        } finally {
+            this.busy = false;
+        }
     },
     async send() {
         if (this.busy || this.uploading) return;
@@ -508,12 +612,8 @@ Alpine.data('mailbox', () => ({
         }
         this.busy = true;
         try {
-            clearTimeout(this.draftTimer);
-            await this.writeDraft();
-            this.submission ??= crypto.randomUUID();
-            sessionStorage.setItem('kioosk.submission', this.submission);
-            await mailRequest('send', 'POST', {...this.draft, submission: this.submission});
-            sessionStorage.removeItem('kioosk.submission');
+            if (!await this.writeDraft()) return;
+            await mailRequest('send', 'POST', {draft: this.draftId, revision: this.draftRevision});
             location.assign(this.folderUrl('sent'));
         } catch (error) {
             this.notify(error.message);
@@ -521,6 +621,7 @@ Alpine.data('mailbox', () => ({
             this.busy = false;
         }
     },
+
 }));
 
 Alpine.start();

@@ -36,10 +36,11 @@ Route::middleware(['auth', 'auth.session'])->group(function (): void {
         Route::get('/mail/message/{id}/attachment/{blob}', [MailboxController::class, 'attachment'])->name('mail.attachment');
         Route::patch('/mail/message/{id}', [MailboxController::class, 'flag']);
         Route::post('/mail/message/{id}/organize', [MailboxController::class, 'organize']);
-        Route::post('/mail/draft/preview', [MailboxController::class, 'preview'])->middleware('throttle:30,1,mail-preview');
-        Route::post('/mail/draft/attachments', [MailboxController::class, 'upload'])->middleware('throttle:25,1,mail-upload');
-        Route::delete('/mail/draft/attachments/{id}', [MailboxController::class, 'removeUpload']);
-        Route::put('/mail/draft', [MailboxController::class, 'draft']);
+        Route::post('/mail/draft/open', [MailboxController::class, 'openDraft']);
+        Route::put('/mail/draft/{id}', [MailboxController::class, 'draft'])->whereUuid('id');
+        Route::delete('/mail/draft/{id}', [MailboxController::class, 'discardDraft'])->whereUuid('id');
+        Route::post('/mail/draft/{id}/attachments', [MailboxController::class, 'upload'])
+            ->whereUuid('id')->middleware('throttle:25,1,mail-upload');
         Route::post('/mail/send', [MailboxController::class, 'send'])->middleware('throttle:10,1,mail-send');
         Route::view('/mail/compose', 'mail', ['composing' => true])->name('compose');
         Route::view('/compose', 'mail', ['composing' => true]);

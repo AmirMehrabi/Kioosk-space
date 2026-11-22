@@ -17,7 +17,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <meta name="theme-color" content="#fdfcfb">
+    <meta name="theme-color" content="#fffaf0">
     <meta name="robots" content="noindex">
     <title>{{ $title }} | کیوسک</title>
     @vite('resources/css/app.css')
@@ -39,14 +39,40 @@
         @endguest
     </header>
     <main class="account-card" aria-labelledby="account-heading">
-        @if ($step !== false)
-            <ol class="account-progress" aria-label="مراحل ثبت‌نام">
-                @foreach ($signupScreens as $label)
-                    <li @if ($loop->index === $step) aria-current="step" @endif @class(['completed' => $loop->index < $step])>{{ $label }}</li>
-                @endforeach
-            </ol>
-        @endif
-        <h1 id="account-heading">{{ $title }}</h1>
+        <header class="account-intro">
+            @if ($step !== false)
+                <ol class="account-progress" aria-label="مراحل ثبت‌نام">
+                    @foreach ($signupScreens as $label)
+                        <li @if ($loop->index === $step) aria-current="step" @endif @class(['completed' => $loop->index < $step])>{{ $label }}</li>
+                    @endforeach
+                </ol>
+            @endif
+            <h1 id="account-heading">{{ $title }}</h1>
+            @switch($screen)
+                @case('name')
+                    <p>این نام را کسانی که از شما نامه می‌گیرند می‌بینند.</p>
+                    @break
+                @case('address')
+                    <p>این همان نشانی‌ای است که به دیگران می‌دهید.</p>
+                    @break
+                @case('security')
+                    <p>نشانی تازهٔ شما <bdi dir="ltr" class="account-address">{{ $signup['handle'].'@'.$domain }}</bdi> است.</p>
+                    @break
+                @case('verify')
+                    @if (auth()->user()->hasVerifiedEmail())
+                        <p>نشانی بازیابی شما تأیید شده است.</p>
+                    @else
+                        <p>ایمیل کیوسک را در <bdi dir="ltr" class="account-address">{{ auth()->user()->email }}</bdi> باز کنید و روی لینک تأیید بزنید.</p>
+                    @endif
+                    @break
+                @case('login')
+                    <p>با نشانی کیوسک یا ایمیل بازیابی وارد شوید.</p>
+                    @break
+                @case('forgot')
+                    <p>ایمیل بازیابی حساب را وارد کنید تا لینک تغییر گذرواژه را دریافت کنید.</p>
+                    @break
+            @endswitch
+        </header>
 
         @if (session('status'))
             <p class="account-status" role="status">{{ session('status') }}</p>
@@ -61,7 +87,6 @@
 
         @switch($screen)
             @case('name')
-                <p>این نام را کسانی که از شما نامه می‌گیرند می‌بینند.</p>
                 <form method="post" action="{{ route('register.store') }}" class="account-form">
                     @csrf
                     <label for="signup-name">نام و نام خانوادگی</label>
@@ -71,7 +96,6 @@
                 @break
 
             @case('address')
-                <p>این همان نشانی‌ای است که به دیگران می‌دهید.</p>
                 <form method="post" action="{{ route('register.store', ['step' => 'address']) }}" class="account-form">
                     @csrf
                     <label for="signup-handle">نام کاربری</label>
@@ -85,7 +109,6 @@
                 @break
 
             @case('security')
-                <p>نشانی تازهٔ شما <bdi dir="ltr" class="account-address">{{ $signup['handle'].'@'.$domain }}</bdi> است.</p>
                 <form method="post" action="{{ route('register.store', ['step' => 'security']) }}" class="account-form">
                     @csrf
                     <label for="recovery-email">ایمیل بازیابی</label>
@@ -98,10 +121,8 @@
 
             @case('verify')
                 @if (auth()->user()->hasVerifiedEmail())
-                    <p>نشانی بازیابی شما تأیید شده است.</p>
                     <a class="primary account-standalone" href="{{ route('imbox') }}">باز کردن صندوق</a>
                 @else
-                    <p>ایمیل کیوسک را در <bdi dir="ltr" class="account-address">{{ auth()->user()->email }}</bdi> باز کنید و روی لینک تأیید بزنید.</p>
                     <form method="post" action="{{ route('verification.send') }}" class="account-form">
                         @csrf
                         <button class="primary">ارسال دوبارهٔ لینک</button>
@@ -110,7 +131,6 @@
                 @break
 
             @case('login')
-                <p>با نشانی کیوسک یا ایمیل بازیابی وارد شوید.</p>
                 <form method="post" action="{{ route('login.store') }}" class="account-form">
                     @csrf
                     <label for="login-email">نشانی ایمیل</label>
@@ -122,7 +142,6 @@
                 @break
 
             @case('forgot')
-                <p>ایمیل بازیابی حساب را وارد کنید تا لینک تغییر گذرواژه را دریافت کنید.</p>
                 <form method="post" action="{{ route('password.email') }}" class="account-form">
                     @csrf
                     <label for="forgot-email">ایمیل بازیابی</label>
