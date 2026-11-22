@@ -6,7 +6,9 @@ use App\Models\MailDraft;
 use App\Models\User;
 use App\Services\ComposeAttachments;
 use App\Services\MailBody;
+use App\Services\MailDestination;
 use App\Services\MailExcerpt;
+use App\Services\SenderScreening;
 use App\Services\StalwartMail;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,7 +22,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 class MailboxController extends Controller
 {
-    public function __construct(private StalwartMail $mail, private MailExcerpt $excerpt, private MailBody $body, private ComposeAttachments $uploads) {}
+    public function __construct(private StalwartMail $mail, private MailExcerpt $excerpt, private MailBody $body, private ComposeAttachments $uploads, private SenderScreening $screening, private MailDestination $destination) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -41,6 +43,12 @@ class MailboxController extends Controller
             }
             if ($folder !== 'trash' && isset($boxes['trash'])) {
                 $filter['inMailboxOtherThan'] = [$boxes['trash']['id']];
+            }
+            if ($user->screening_mailbox_id) {
+                $filter = ['operator' => 'AND', 'conditions' => [
+                    $filter,
+                    ['operator' => 'NOT', 'conditions' => [['inMailbox' => $user->screening_mailbox_id]]],
+                ]];
             }
             $ids = $this->mail->request('Email/query', [
                 'filter' => $filter, 'position' => (int) ($data['position'] ?? 0), 'limit' => 35,
@@ -110,6 +118,9 @@ class MailboxController extends Controller
         $data = $request->validate(['flag' => 'required|in:read,later,saved,feed,receipts', 'value' => 'required|boolean']);
         $user = $request->user();
         abort_unless($user->mail_account_id, 404);
+        if ($user->screening_mailbox_id) {
+            $this->assertVisible($user, $id);
+        }
         $keyword = $data['flag'] === 'read' ? '$seen' : 'kioosk-'.$data['flag'];
         $result = $this->mail->request('Email/set', ['update' => [$id => ['keywords/'.$keyword => $data['value'] ?: null]]], $user);
         abort_if(isset($result['notUpdated'][$id]), 404);
@@ -126,23 +137,15 @@ class MailboxController extends Controller
         ]);
         $user = $request->user();
         abort_unless($user->mail_account_id, 404);
-        $email = $this->mail->request('Email/get', ['ids' => [$id], 'properties' => ['id']], $user)['list'];
-        abort_if(empty($email), 404);
+        $this->assertVisible($user, $id);
 
         if ($data['action'] === 'move') {
-            $destination = $data['destination'];
-            $role = match ($destination) {
-                'imbox' => 'inbox',
-                'trash' => 'trash',
-                default => 'archive',
-            };
             $boxes = collect($this->mail->request('Mailbox/get', ['properties' => ['id', 'role']], $user)['list'])->keyBy('role');
-            abort_unless(isset($boxes[$role]), 422, 'پوشهٔ مقصد در دسترس نیست.');
-            $patch = [
-                'mailboxIds' => [$boxes[$role]['id'] => true],
-                'keywords/kioosk-feed' => $destination === 'feed' ?: null,
-                'keywords/kioosk-receipts' => $destination === 'receipts' ?: null,
-            ];
+            try {
+                $patch = $this->destination->patch($boxes, $data['destination']);
+            } catch (RuntimeException) {
+                abort(422, 'پوشهٔ مقصد در دسترس نیست.');
+            }
         } else {
             $keyword = 'kioosk-label-'.bin2hex($data['label']);
             $patch = ['keywords/'.$keyword => $data['action'] === 'label' ?: null];
@@ -439,13 +442,22 @@ class MailboxController extends Controller
         return $this->findEmail($request, $id) ?? abort(404);
     }
 
+    private function assertVisible(User $user, string $id): void
+    {
+        $properties = $user->screening_mailbox_id ? ['id', 'mailboxIds'] : ['id'];
+        $email = $this->mail->request('Email/get', ['ids' => [$id], 'properties' => $properties], $user)['list'][0] ?? null;
+        abort_if($email === null || $this->screening->isHeld($user, $email), 404);
+    }
+
     private function findEmail(Request $request, string $id): ?array
     {
         $result = $this->mail->request('Email/get', [
             'ids' => [$id], 'fetchTextBodyValues' => true, 'fetchHTMLBodyValues' => true, 'maxBodyValueBytes' => 160000,
         ], $request->user());
 
-        return $result['list'][0] ?? null;
+        $email = $result['list'][0] ?? null;
+
+        return $email && ! $this->screening->isHeld($request->user(), $email) ? $email : null;
     }
 
     private function bodyParts(array $email, string $type): string

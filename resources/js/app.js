@@ -1,7 +1,10 @@
 import Alpine from 'alpinejs';
 
 const icon = (paths) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + paths + '</svg>';
+const thumb = '<path d="M7 10v11m0-11 5-7a2 2 0 0 1 2 2l-.8 5H19a2 2 0 0 1 2 2.4l-1.4 7A2 2 0 0 1 17.7 21H7m0-11H4a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h3"/>';
 const icons = {
+    thumbsUp: icon(thumb),
+    thumbsDown: icon('<g transform="rotate(180 12 12)">' + thumb + '</g>'),
     inbox: icon('<path d="M4 4h16l2 10v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-4L4 4Z"/><path d="M2 14h6l2 3h4l2-3h6"/>'),
     feed: icon('<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 9h8m-8 4h8m-8 4h4"/>'),
     receipt: icon('<path d="M6 3l3 2 3-2 3 2 3-2v18l-3-2-3 2-3-2-3 2V3Z"/><path d="M9 10h6m-6 4h5"/>'),
@@ -9,6 +12,7 @@ const icons = {
     bookmark: icon('<path d="M6 5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16l-6-4-6 4V5Z"/>'),
     send: icon('<path d="m22 2-7 20-4-9-9-4 20-7ZM22 2 11 13"/>'),
     edit: icon('<path d="m14 5 5 5M4 20l5-1L20 8a3.5 3.5 0 0 0-5-5L4 14l-1 6Z"/>'),
+    screener: icon('<path d="M4 6h16l-6 7v5l-4 2v-7L4 6Z"/>'),
     search: icon('<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/>'),
     more: icon('<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>'),
     reply: icon('<path d="m14 5 6 6-6 6v-4h-3c-4 0-6 2-7 5v-2a7 7 0 0 1 7-7h3V5Z"/>'),
@@ -27,6 +31,8 @@ const folders = {
     later: { title: 'پاسخ بعداً', icon: 'clock', description: 'نامه‌هایی که می‌خواهید بعداً پاسخ دهید.' },
     saved: { title: 'کنارگذاشته‌ها', icon: 'bookmark', description: 'نامه‌هایی که می‌خواهید دم دست باشند.' },
     trash: { title: 'زباله‌دان', icon: 'trash', description: 'نامه‌هایی که به زباله‌دان منتقل کرده‌اید.' },
+    screener: { title: 'بررسی فرستنده‌ها', icon: 'screener' },
+    'screener-history': { title: 'سابقهٔ بررسی', icon: 'clock' },
     sent: { title: 'ارسال‌شده‌ها', icon: 'send', description: 'نامه‌هایی که در نسخهٔ آزمایشی فرستاده‌اید.' },
 };
 
@@ -83,9 +89,13 @@ async function mailRequest(path, method = 'GET', payload, keepalive = false) {
     });
     if (response.status === 204) return null;
     const data = await response.json();
-    if (!response.ok) throw new Error(response.status === 401 || response.status === 419
-        ? 'برای ادامه دوباره وارد حساب شوید.'
-        : Object.values(data.errors ?? {})[0]?.[0] ?? data.message ?? 'ارتباط با صندوق برقرار نشد.');
+    if (!response.ok) {
+        const error = new Error(response.status === 401 || response.status === 419
+            ? 'برای ادامه دوباره وارد حساب شوید.'
+            : Object.values(data.errors ?? {})[0]?.[0] ?? data.message ?? 'ارتباط با صندوق برقرار نشد.');
+        error.status = response.status;
+        throw error;
+    }
     return data;
 }
 
@@ -128,6 +138,30 @@ Alpine.data('mailbox', () => ({
     folderKey: 'imbox',
     query: '',
     selected: null,
+    screeningCount: 0,
+    screeningSenders: [],
+    screeningHistory: [],
+    screeningFilter: 'all',
+    screeningLimit: 25,
+    screeningPreview: null,
+    screeningBusy: false,
+    screeningError: '',
+    screeningFeedback: '',
+    screeningUndo: null,
+    get screeningEnabled() {
+        return this.$root.dataset.screening === 'true';
+    },
+    get screeningView() {
+        return this.folderKey === 'screener' || this.folderKey === 'screener-history';
+    },
+    get filteredScreeningHistory() {
+        return this.screeningHistory.filter(row => this.screeningFilter === 'all'
+            || (row.destination === 'out') === (this.screeningFilter === 'out'));
+    },
+    get navigationFolders() {
+        return Object.fromEntries(Object.entries(this.folders).filter(([key]) => key !== 'screener-history'
+            && (key !== 'screener' || this.screeningEnabled)));
+    },
     threadAction: '',
     threadError: '',
     threadBusy: false,
@@ -151,7 +185,7 @@ Alpine.data('mailbox', () => ({
         this.syncFolder();
         window.addEventListener('hashchange', () => this.syncFolder());
         window.addEventListener('keydown', (event) => {
-            if (event.key === '/' && !this.compose && !event.ctrlKey && !event.metaKey &&
+            if (event.key === '/' && !this.compose && !this.screeningView && !event.ctrlKey && !event.metaKey &&
                 !event.target.closest?.('input, textarea, [contenteditable]')) {
                 event.preventDefault();
                 this.$refs.search.focus();
@@ -159,7 +193,13 @@ Alpine.data('mailbox', () => ({
         });
         if (!this.compose) {
             setInterval(() => {
-                if (!document.hidden && !this.selected && !this.loading && this.messages.length <= 35) this.load();
+                if (document.hidden || this.selected || this.loading || this.screeningBusy) return;
+                if (this.screeningView) {
+                    if (!this.screeningPreview) this.load();
+                } else {
+                    if (this.messages.length <= 35) this.load();
+                    this.loadScreeningCount();
+                }
             }, 30000);
             return;
         }
@@ -207,6 +247,7 @@ Alpine.data('mailbox', () => ({
         return !this.compose && this.folderKey === 'imbox' && !this.query.trim();
     },
     async load(append = false, section = 'all') {
+        if (this.screeningView) return this.loadScreening();
         const version = ++this.loadVersion;
         const minimumDisplay = !append && !Object.keys(this.pages).length ? spinnerVisible() : null;
         this.loading = true;
@@ -281,9 +322,106 @@ Alpine.data('mailbox', () => ({
     syncFolder() {
         const key = location.hash.slice(1);
         this.folderKey = Object.hasOwn(folders, key) ? key : 'imbox';
+        if (this.screeningView && !this.screeningEnabled) this.folderKey = 'imbox';
         this.selected = null;
+        this.query = '';
+        this.screeningPreview = null;
+        this.screeningLimit = 25;
+        this.screeningError = '';
         this.closeHeaderMenu();
-        if (!this.compose) this.load();
+        if (!this.compose) {
+            this.load();
+            if (!this.screeningView) this.loadScreeningCount();
+        }
+    },
+    async loadScreeningCount() {
+        if (!this.screeningEnabled) return;
+        const version = this.loadVersion;
+        try {
+            const {count} = await mailRequest('screener?count=1');
+            if (version === this.loadVersion) this.screeningCount = count;
+        } catch {
+            // Keep the last count until the next refresh. The queue has its own retry state.
+        }
+    },
+    async loadScreening() {
+        const version = ++this.loadVersion;
+        const history = this.folderKey === 'screener-history';
+        this.loading = true;
+        this.loadError = '';
+        try {
+            const data = await mailRequest(history ? 'screener?history=1' : 'screener');
+            if (version !== this.loadVersion) return;
+            if (history) {
+                this.screeningHistory = data.history;
+            } else {
+                this.screeningCount = data.count;
+                this.screeningSenders = data.senders;
+                if (this.screeningPreview && !data.senders.some(sender => sender.address === this.screeningPreview.address)) {
+                    this.screeningPreview = null;
+                }
+            }
+        } catch (error) {
+            if (version === this.loadVersion) this.loadError = error.message;
+        } finally {
+            if (version === this.loadVersion) this.loading = false;
+        }
+    },
+    screeningTime(value) {
+        return time.format(new Date(value));
+    },
+    async previewSender(sender, message = sender.messages[0]) {
+        if (this.screeningPreview?.id === message.id && !this.screeningPreview.error) {
+            this.screeningPreview = null;
+            return;
+        }
+        this.screeningPreview = {address: sender.address, id: message.id, loading: true};
+        try {
+            const detail = await mailRequest('screener/preview/' + encodeURIComponent(message.id));
+            if (this.screeningPreview?.id === message.id) {
+                this.screeningPreview = {...detail, address: sender.address, id: message.id};
+            }
+        } catch (error) {
+            if (this.screeningPreview?.id === message.id) {
+                this.screeningPreview = {address: sender.address, id: message.id, error: error.message};
+            }
+        }
+    },
+    async submitScreening(sender, destination, index = 0) {
+        if (this.screeningBusy) return;
+        this.screeningBusy = true;
+        this.screeningError = '';
+        const currentFolder = this.folderKey;
+        const root = this.$root;
+        try {
+            const result = await mailRequest('screener/decision', 'POST', {
+                address: sender.address, destination, revision: sender.revision ?? null,
+            });
+            this.screeningFeedback = result.syncing ? 'تصمیم ثبت شد. جابه‌جایی نامه‌ها در انتظار انجام است.'
+                : destination === null ? 'تصمیم بازگردانده شد.'
+                : destination === 'out' ? 'فرستنده رد شد.'
+                : 'فرستنده پذیرفته شد. مقصد: ' + this.folders[destination].title;
+            this.screeningUndo = destination === null ? null : result;
+            if (this.folderKey === currentFolder) {
+                if (this.screeningPreview?.address === sender.address) this.screeningPreview = null;
+                await this.loadScreening();
+            }
+            this.screeningBusy = false;
+            if (this.folderKey === currentFolder) this.$nextTick(() => {
+                const selector = destination === 'out' && currentFolder === 'screener'
+                    ? '[data-screening-reject]' : '[data-screening-focus]';
+                const actions = [...root.querySelectorAll(selector)].filter(action => action.getClientRects().length);
+                (actions[Math.min(index, actions.length - 1)] ?? root.querySelector('#screening-heading'))?.focus();
+            });
+        } catch (error) {
+            if (error.status === 409 && this.folderKey === currentFolder) {
+                this.screeningUndo = null;
+                await this.loadScreening();
+            }
+            this.screeningError = error.message;
+        } finally {
+            this.screeningBusy = false;
+        }
     },
     number(value) {
         return number.format(value);

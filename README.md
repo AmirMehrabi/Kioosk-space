@@ -21,6 +21,20 @@ Laravel is a web application framework with expressive, elegant syntax. We belie
 
 Laravel is accessible, powerful, and provides tools required for large, robust applications.
 
+## Kioosk Screener
+
+Screening is enabled per mailbox. After applying the migrations, run Laravel's scheduler on the application host so `mail:screener-sync` runs every minute. It files future mail from known senders and retries interrupted decisions.
+
+On staging, enable a verified pilot mailbox with:
+
+```sh
+php artisan mail:screener-enable pilot@example.com
+```
+
+This installs a Stalwart JMAP Sieve script that holds clean inbound mail in a dedicated folder and leaves spam handling to Stalwart. The command refuses to replace an unrelated active Sieve script. Existing mail stays in place and prior inbox, archived, and sent correspondence seeds the initial sender decisions.
+
+Before enabling another mailbox, verify that an SMTP delivery from an unknown sender appears only in the Screener, that approving it puts the original message in the selected destination, and that a later message from the same address reaches that destination after the next scheduler run. Screened-out messages are retained in the holding mailbox and count toward the account's quota.
+
 ## Learning Laravel
 
 Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.

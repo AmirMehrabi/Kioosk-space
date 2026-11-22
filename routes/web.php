@@ -3,6 +3,7 @@
 use App\Http\Controllers\AccountController;
 use App\Http\Controllers\MailboxController;
 use App\Http\Controllers\RegistrationController;
+use App\Http\Controllers\ScreenerController;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'landing')->name('landing');
@@ -32,6 +33,9 @@ Route::middleware(['auth', 'auth.session'])->group(function (): void {
     Route::middleware('verified')->group(function (): void {
         Route::view('/mail', 'mail')->name('imbox');
         Route::get('/mail/data', [MailboxController::class, 'index'])->name('mail.data');
+        Route::get('/mail/screener', [ScreenerController::class, 'index']);
+        Route::get('/mail/screener/preview/{id}', [ScreenerController::class, 'preview']);
+        Route::post('/mail/screener/decision', [ScreenerController::class, 'decide']);
         Route::get('/mail/message/{id}', [MailboxController::class, 'show']);
         Route::get('/mail/message/{id}/attachment/{blob}', [MailboxController::class, 'attachment'])->name('mail.attachment');
         Route::patch('/mail/message/{id}', [MailboxController::class, 'flag']);

@@ -21,6 +21,7 @@
     data-account-initial="{{ $initial }}"
     data-inbox-url="{{ route('imbox', absolute: false) }}"
     data-compose-url="{{ route('compose', absolute: false) }}"
+    data-screening="{{ $account->screening_enabled ? 'true' : 'false' }}"
     data-composing="{{ ($composing ?? false) ? 'true' : 'false' }}" :class="{'reading-page': selected}" x-cloak>
     <a href="#main-content" class="skip-link" @click.prevent="document.getElementById('main-content').focus()">رفتن به محتوای اصلی</a>
     <header class="masthead" @keydown.escape="closeHeaderMenu(true)" @click.outside="if (headerMenu !== 'message') closeHeaderMenu()">
@@ -35,7 +36,7 @@
                     </a>
                     <span class="breadcrumb-pill breadcrumb-current" x-show="!selected && !compose" aria-current="page" x-text="folders[folderKey].title"></span>
                 </nav>
-                <label class="search" x-show="!compose" @focusin="closeHeaderMenu">
+                <label class="search" x-show="!compose && !screeningView" @focusin="closeHeaderMenu">
                     <span x-html="icons.search"></span>
                     <input type="search" placeholder="جست‌وجو" aria-label="جست‌وجو در نامه‌ها" x-model="query" x-ref="search" @input="search">
                 </label>
@@ -48,11 +49,12 @@
                     <span class="brand-chevron" x-html="icons.chevron"></span>
                 </button>
                 <nav class="folder-dropdown" id="folder-dropdown" aria-label="پوشه‌های نامه" x-show="headerMenu === 'folders'">
-                    <template x-for="(folder, key) in folders" :key="key">
+                    <template x-for="(folder, key) in navigationFolders" :key="key">
                         <a :href="folderUrl(key)" class="nav-item" :class="{active: !compose && folderKey === key}"
                             @click="navigateFolder(key, $event)" :aria-current="!compose && folderKey === key ? 'page' : null">
                             <span x-html="icons[folder.icon]"></span><span x-text="folder.title"></span>
                             <small x-show="key === 'imbox' && unread" x-text="number(unread)"></small>
+                            <small x-show="key === 'screener' && screeningCount" x-text="number(screeningCount)"></small>
                         </a>
                     </template>
                     <a class="nav-item dropdown-compose" href="{{ route('compose', absolute: false) }}">
@@ -74,6 +76,9 @@
                         <strong>{{ $account->name }}</strong>
                         <span dir="ltr">{{ $mailboxAddress }}</span>
                         <button type="button" class="secondary" @click="copyAddress">کپی نشانی ایمیل</button>
+                        @if ($account->screening_enabled)
+                            <a class="secondary" :href="folderUrl('screener-history')" @click="navigateFolder('screener-history', $event)">سابقهٔ بررسی فرستنده‌ها</a>
+                        @endif
                         <form method="post" action="{{ route('logout') }}">
                             @csrf
                             <button type="submit" class="secondary">خروج از حساب</button>
@@ -87,7 +92,10 @@
     <div class="workspace">
         <main class="content" id="main-content" tabindex="-1">
             <div class="empty" x-show="loadError" role="alert"><p x-text="loadError"></p><button class="secondary" @click="compose ? openComposer() : load()">تلاش دوباره</button></div>
-            <template x-if="!compose && !selected">
+            @if ($account->screening_enabled)
+                @include('mail.screener')
+            @endif
+            <template x-if="!compose && !selected && !screeningView">
                 <div>
                     <section class="intro" :class="{'hero': folderKey === 'imbox' && !query}">
                         <div>
@@ -96,6 +104,13 @@
                             <p class="intro-description" x-text="query ? number(visible.length) + ' نامه پیدا شد' : folders[folderKey].description"></p>
                         </div>
                     </section>
+                    @if ($account->screening_enabled)
+                        <a class="screening-entry" x-show="splitInbox && screeningCount" :href="folderUrl('screener')"
+                            @click="navigateFolder('screener', $event)">
+                            <span x-html="icons.screener"></span>
+                            <span x-text="'بررسی ' + number(screeningCount) + ' فرستندهٔ جدید'"></span>
+                        </a>
+                    @endif
                     <template x-for="group in groups" :key="group.key">
                         <section class="message-group" :aria-label="group.label">
                             <div class="group-title"><h2 x-text="group.label"></h2><span x-show="group.messages.length" x-text="number(group.messages.length)"></span></div>

@@ -29,6 +29,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'password' => 'hashed',
             'mail_secret' => 'encrypted',
             'mail_draft' => 'encrypted:array',
+            'screening_enabled' => 'boolean',
         ];
     }
 }
