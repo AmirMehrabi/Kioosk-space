@@ -20,13 +20,13 @@
     <meta name="theme-color" content="#fffaf0">
     <meta name="robots" content="noindex">
     <title>{{ $title }} | کیوسک</title>
+    <x-kioosk-icons />
     @vite('resources/css/app.css')
 </head>
 <body class="account-page">
     <header class="account-header">
         <a class="brand" href="{{ route('landing') }}">
-            <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m4 7 8 6 8-6"/></svg></span>
-            کیوسک
+            <x-kioosk-brand />
         </a>
         @guest
             @if ($screen === 'login')

@@ -6,14 +6,15 @@
     <meta name="description" content="کیوسک، صندوق نامهٔ فارسی برای خواندن، مرتب کردن و پاسخ دادن به ایمیل‌ها.">
     <meta name="theme-color" content="#fdfcfb">
     <title>کیوسک | نامه‌های مهم، دم دست</title>
+    <x-kioosk-icons />
     @vite(['resources/css/app.css', 'resources/css/landing.css', 'resources/js/app.js'])
 </head>
 <body class="landing">
     <a class="skip-link" href="#landing-content">رفتن به محتوای اصلی</a>
     <header class="landing-header">
         <a class="landing-brand" href="{{ route('landing', absolute: false) }}">
-            <span class="landing-logo" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m4 7 8 6 8-6"/></svg></span>
-            کیوسک
+            <img class="landing-logo" src="{{ asset('kioosk-logos/kioosk-logo-horizontal-bilingual-color-4200.png') }}"
+                width="4200" height="650" alt="کیوسک | Kioosk">
         </a>
         <nav aria-label="صفحهٔ اصلی">
             <a class="landing-nav-link" href="#folders">صندوق چطور کار می‌کند؟</a>
@@ -153,7 +154,10 @@
     </main>
 
     <footer class="landing-footer landing-wrap">
-        <a href="{{ route('landing', absolute: false) }}">کیوسک</a>
+        <a class="landing-footer-brand" href="{{ route('landing', absolute: false) }}">
+            <img src="{{ asset('kioosk-logos/kioosk-logo-stacked-bilingual-color-2400.png') }}"
+                width="2400" height="1550" alt="کیوسک | Kioosk" loading="lazy">
+        </a>
         <a href="{{ route('imbox', absolute: false) }}">صندوق نامه‌ها</a>
     </footer>
 </body>

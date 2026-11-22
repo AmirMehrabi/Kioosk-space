@@ -11,6 +11,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="theme-color" content="#fdfcfb">
     <title>کیوسک | نامه‌ها</title>
+    <x-kioosk-icons />
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body x-data="mailbox" @click="leaveComposer"
@@ -43,8 +44,7 @@
             <div class="header-brand" @focusout="if (!$el.contains($event.relatedTarget) && headerMenu === 'folders') closeHeaderMenu()">
                 <button type="button" class="brand folder-toggle" id="folder-toggle" aria-label="کیوسک، پوشه‌های نامه"
                     aria-controls="folder-dropdown" :aria-expanded="headerMenu === 'folders'" @click="toggleHeaderMenu('folders')">
-                    <span class="brand-mark" x-html="icons.brand"></span>
-                    <span>کیوسک</span>
+                    <x-kioosk-brand />
                     <span class="brand-chevron" x-html="icons.chevron"></span>
                 </button>
                 <nav class="folder-dropdown" id="folder-dropdown" aria-label="پوشه‌های نامه" x-show="headerMenu === 'folders'">
