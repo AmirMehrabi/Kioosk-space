@@ -12,7 +12,7 @@
 }
 .landing-brand, .landing-footer-brand { display: inline-flex; align-items: center; }
 .landing-brand { min-height: 44px; }
-.landing-logo { width: clamp(145px, 25vw, 244px); height: auto; }
+.landing-logo { width: clamp(145px, 25vw, 244px); height: 48px; object-fit: cover; }
 .landing-footer-brand img { width: 96px; height: auto; }
 .landing-header nav { display: flex; align-items: center; gap: clamp(10px, 3vw, 34px); }
 .landing-header .landing-button { min-height: 48px; padding-inline: 20px; border-radius: 28px; }
@@ -71,6 +71,7 @@
     color: var(--muted); font-size: 13px;
 }
 .preview-header strong { font-size: 21px; color: #004aa8; }
+.preview-wordmark { width: 96px; height: auto; }
 .preview-user {
     display: grid; place-items: center; border-radius: 50%; background: #efeeeb; color: #17529c;
     width: 30px; height: 30px; font-weight: 850;

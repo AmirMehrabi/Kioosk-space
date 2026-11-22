@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="description" content="کیوسک، صندوق نامهٔ فارسی برای خواندن، مرتب کردن و پاسخ دادن به ایمیل‌ها.">
     <meta name="theme-color" content="#fdfcfb">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="کیوسک | نامه‌های مهم، دم دست">
+    <meta property="og:description" content="کیوسک، صندوق نامهٔ فارسی برای خواندن، مرتب کردن و پاسخ دادن به ایمیل‌ها.">
+    <meta property="og:url" content="{{ route('landing') }}">
+    <meta property="og:image" content="{{ asset('kioosk-logos/kioosk-logo-bilingual-blue-badge.png') }}">
+    <meta property="og:image:width" content="2172">
+    <meta property="og:image:height" content="724">
+    <meta property="og:image:alt" content="کیوسک | Kioosk">
     <title>کیوسک | نامه‌های مهم، دم دست</title>
     <x-kioosk-icons />
     @vite(['resources/css/app.css', 'resources/css/landing.css', 'resources/js/app.js'])
@@ -13,8 +21,11 @@
     <a class="skip-link" href="#landing-content">رفتن به محتوای اصلی</a>
     <header class="landing-header">
         <a class="landing-brand" href="{{ route('landing', absolute: false) }}">
-            <img class="landing-logo" src="{{ asset('kioosk-logos/kioosk-logo-horizontal-bilingual-color-4200.png') }}"
-                width="4200" height="650" alt="کیوسک | Kioosk">
+            <picture>
+                <source media="print" srcset="{{ asset('kioosk-logos/kioosk-logo-horizontal-bilingual-monochrome.png') }}">
+                <img class="landing-logo" src="{{ asset('kioosk-logos/kioosk-logo-horizontal-bilingual.png') }}"
+                    width="2172" height="724" alt="کیوسک | Kioosk">
+            </picture>
         </a>
         <nav aria-label="صفحهٔ اصلی">
             <a class="landing-nav-link" href="#folders">صندوق چطور کار می‌کند؟</a>
@@ -45,7 +56,11 @@
                 </div>
                 <div class="hero-stage">
                     <div class="landing-preview" aria-hidden="true">
-                        <div class="preview-header"><span>صندوق نامه‌ها</span><strong>کیوسک</strong><span class="preview-user">آ</span></div>
+                        <div class="preview-header">
+                            <span>صندوق نامه‌ها</span>
+                            <img class="preview-wordmark" src="{{ asset('kioosk-logos/kioosk-wordmark-english.png') }}" width="2172" height="724" alt="">
+                            <span class="preview-user">آ</span>
+                        </div>
                         <div class="preview-body">
                             <div class="preview-title">نامه‌های مهم <span>۳ تازه</span></div>
                             <div class="preview-row"><i>س</i><div><strong>نسخهٔ نهایی طرح‌ها آماده شد</strong><small>سحر مرادی</small></div><time>۱۰:۴۲</time></div>
@@ -155,8 +170,8 @@
 
     <footer class="landing-footer landing-wrap">
         <a class="landing-footer-brand" href="{{ route('landing', absolute: false) }}">
-            <img src="{{ asset('kioosk-logos/kioosk-logo-stacked-bilingual-color-2400.png') }}"
-                width="2400" height="1550" alt="کیوسک | Kioosk" loading="lazy">
+            <img src="{{ asset('kioosk-logos/kioosk-logo-stacked-bilingual.png') }}"
+                width="1254" height="1254" alt="کیوسک | Kioosk" loading="lazy">
         </a>
         <a href="{{ route('imbox', absolute: false) }}">صندوق نامه‌ها</a>
     </footer>
