@@ -198,7 +198,7 @@ h1 { font-size: clamp(26px, 3.8vw, 40px); line-height: 1.22; font-weight: 850; m
 .heading-icon { display: grid; place-items: center; width: 55px; height: 55px; background: var(--subtle); color: var(--blue); border-radius: 15px; }
 .heading-icon svg { width: 25px; height: 25px; }
 .field { display: flex; align-items: center; gap: 10px; min-height: 62px; padding-inline: 22px; border-bottom: 1px solid var(--border); color: var(--muted); }
-.field span { width: 64px; flex: none; font-weight: 700; }
+label.field > span { width: 64px; flex: none; font-weight: 700; }
 .field input { min-width: 0; width: 100%; padding: 10px; color: var(--ink); border-radius: 6px; }
 .field input[dir=ltr] { text-align: right; }
 .composer textarea { display: block; width: 100%; min-height: 290px; resize: vertical; padding: 22px; line-height: 1.9; outline-offset: -3px; }
