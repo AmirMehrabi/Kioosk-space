@@ -97,6 +97,64 @@
             @endif
             <template x-if="!compose && !selected && !screeningView">
                 <div>
+                    <div class="bulk-anchor">
+                        <section class="bulk-bar" x-ref="bulkBar" x-show="checkedIds.length" aria-label="عملیات نامه‌های انتخاب‌شده"
+                            @keydown.escape.stop.prevent="closeBulkMenu()">
+                            <div class="bulk-bar-heading">
+                                <button class="nav-item bulk-toggle" x-ref="bulkToggle" type="button" aria-controls="bulk-actions"
+                                    :aria-expanded="bulkExpanded" @click="bulkExpanded = !bulkExpanded">
+                                    <strong role="status" x-text="number(checkedIds.length) + ' نامه انتخاب شده'"></strong>
+                                    <span x-html="icons.chevron"></span>
+                                </button>
+                                <span class="bulk-progress" role="status" x-show="bulkBusy">در حال انجام…</span>
+                                <button class="nav-item" type="button" :disabled="bulkBusy" @click="clearBulkSelection(true)">لغو انتخاب</button>
+                            </div>
+                            <div id="bulk-actions" x-show="bulkExpanded">
+                                <fieldset class="bulk-actions" x-show="!bulkPanel" :disabled="bulkBusy || loading">
+                                    <button class="nav-item" type="button" @click="applyBulkAction('read')"><span x-html="icons.inbox"></span> خوانده‌شده</button>
+                                    <button class="nav-item" type="button" @click="applyBulkAction('unread')"><span x-html="icons.inbox"></span> خوانده‌نشده</button>
+                                    <button class="nav-item" type="button" @click="applyBulkAction('later')"><span x-html="icons.clock"></span> افزودن به پاسخ بعداً</button>
+                                    <button class="nav-item" type="button" @click="applyBulkAction('unlater')"><span x-html="icons.clock"></span> حذف از پاسخ بعداً</button>
+                                    <button class="nav-item" type="button" @click="applyBulkAction('save')"><span x-html="icons.bookmark"></span> افزودن به کنارگذاشته‌ها</button>
+                                    <button class="nav-item" type="button" @click="applyBulkAction('unsave')"><span x-html="icons.bookmark"></span> حذف از کنارگذاشته‌ها</button>
+                                    <button class="nav-item" type="button" data-bulk-action="label" @click="openBulkPanel('label')"><span x-html="icons.label"></span> افزودن برچسب</button>
+                                    <button class="nav-item" type="button" data-bulk-action="unlabel" :disabled="!bulkLabels.length"
+                                        @click="openBulkPanel('unlabel')"><span x-html="icons.label"></span> حذف برچسب</button>
+                                    <button class="nav-item" type="button" data-bulk-action="move" @click="openBulkPanel('move')"><span x-html="icons.move"></span> انتقال به پوشه</button>
+                                    <button class="nav-item bulk-trash" type="button" x-show="folderKey !== 'trash' || query.trim()"
+                                        @click="$refs.bulkTrashDialog.showModal()"><span x-html="icons.trash"></span> انتقال به زباله‌دان</button>
+                                </fieldset>
+                                <div class="bulk-panel" x-show="bulkPanel">
+                                    <button class="nav-item" x-ref="bulkBack" type="button" @click="closeBulkPanel()"><span x-html="icons.back"></span> بازگشت</button>
+                                    <form x-show="bulkPanel === 'label'" @submit.prevent="applyBulkAction('label', bulkLabel)">
+                                        <fieldset class="bulk-label-form" :disabled="bulkBusy || loading">
+                                            <input x-ref="bulkLabelInput" type="text" aria-label="برچسب جدید" placeholder="برچسب جدید" dir="auto" maxlength="25" required x-model="bulkLabel">
+                                            <button class="primary" type="submit" :disabled="!bulkLabel.trim()">افزودن برچسب</button>
+                                        </fieldset>
+                                    </form>
+                                    <fieldset class="bulk-actions" x-show="bulkPanel === 'unlabel'" :disabled="bulkBusy || loading" aria-label="برچسب برای حذف">
+                                        <template x-for="label in bulkLabels" :key="label">
+                                            <button class="nav-item" type="button" @click="applyBulkAction('unlabel', label)"><span x-html="icons.label"></span><bdi x-text="label"></bdi></button>
+                                        </template>
+                                    </fieldset>
+                                    <fieldset class="bulk-actions" x-show="bulkPanel === 'move'" :disabled="bulkBusy || loading" aria-label="پوشهٔ مقصد">
+                                        <template x-for="key in ['imbox', 'feed', 'receipts']" :key="key">
+                                            <button class="nav-item" type="button" @click="applyBulkAction('move', key)"><span x-html="icons[folders[key].icon]"></span><span x-text="folders[key].title"></span></button>
+                                        </template>
+                                    </fieldset>
+                                </div>
+                            </div>
+                            <p class="bulk-feedback" x-show="bulkFeedback && bulkExpanded" x-text="bulkFeedback"></p>
+                        </section>
+                    </div>
+                    <dialog class="paper compose-dialog" x-ref="bulkTrashDialog" aria-labelledby="bulk-trash-title">
+                        <h2 id="bulk-trash-title">انتقال به زباله‌دان</h2>
+                        <p x-text="number(checkedIds.length) + ' نامه به زباله‌دان منتقل شود؟'"></p>
+                        <form class="actions" @submit.prevent="$refs.bulkTrashDialog.close(); applyBulkAction('trash')">
+                            <button class="secondary" type="button" autofocus @click="$refs.bulkTrashDialog.close()">بازگشت</button>
+                            <button class="primary" type="submit">انتقال به زباله‌دان</button>
+                        </form>
+                    </dialog>
                     <section class="intro" :class="{'hero': folderKey === 'imbox' && !query}">
                         <div>
                             <p class="eyebrow" x-show="folderKey === 'imbox' && !query"><span></span> صندوق {{ $account->name }}</p>
@@ -111,61 +169,6 @@
                             <span x-text="'بررسی ' + number(screeningCount) + ' فرستندهٔ جدید'"></span>
                         </a>
                     @endif
-                    <section class="bulk-bar" x-ref="bulkBar" x-show="checkedIds.length" aria-label="عملیات نامه‌های انتخاب‌شده">
-                        <div class="bulk-bar-heading">
-                            <strong role="status" x-text="number(checkedIds.length) + ' نامه انتخاب شده'"></strong>
-                            <button class="secondary" type="button" :disabled="bulkBusy" @click="clearBulkSelection(true)">لغو انتخاب</button>
-                        </div>
-                        <form @submit.prevent="submitBulkAction()">
-                            <fieldset class="bulk-controls" :disabled="bulkBusy || loading">
-                                <select aria-label="عملیات" x-model="bulkAction" x-ref="bulkActionMenu" @change="bulkLabel = ''">
-                                    <option value="">انتخاب عملیات</option>
-                                    <optgroup label="وضعیت خواندن">
-                                        <option value="read">نشان‌گذاری به‌عنوان خوانده‌شده</option>
-                                        <option value="unread">نشان‌گذاری به‌عنوان خوانده‌نشده</option>
-                                    </optgroup>
-                                    <optgroup label="دسته‌بندی">
-                                        <option value="later">افزودن به پاسخ بعداً</option>
-                                        <option value="unlater">حذف از پاسخ بعداً</option>
-                                        <option value="save">افزودن به کنارگذاشته‌ها</option>
-                                        <option value="unsave">حذف از کنارگذاشته‌ها</option>
-                                        <option value="label">افزودن برچسب</option>
-                                        <option value="unlabel" :disabled="!bulkLabels.length">حذف برچسب</option>
-                                    </optgroup>
-                                    <option value="move">انتقال به پوشه</option>
-                                    <option value="trash" :disabled="folderKey === 'trash' && !query.trim()">انتقال به زباله‌دان</option>
-                                </select>
-                                <template x-if="bulkAction === 'label'">
-                                    <input type="text" aria-label="برچسب جدید" placeholder="برچسب جدید" dir="auto" maxlength="25" required x-model="bulkLabel">
-                                </template>
-                                <template x-if="bulkAction === 'unlabel'">
-                                    <select aria-label="برچسب برای حذف" x-model="bulkLabel" required>
-                                        <option value="">انتخاب برچسب</option>
-                                        <template x-for="label in bulkLabels" :key="label">
-                                            <option :value="label" x-text="label" dir="auto"></option>
-                                        </template>
-                                    </select>
-                                </template>
-                                <template x-if="bulkAction === 'move'">
-                                    <select aria-label="پوشهٔ مقصد" x-model="bulkDestination">
-                                        <option value="imbox">نامه‌های مهم</option>
-                                        <option value="feed">خواندنی‌ها</option>
-                                        <option value="receipts">رسیدها</option>
-                                    </select>
-                                </template>
-                                <button class="primary" type="submit" :disabled="!bulkActionReady" x-text="bulkBusy ? 'در حال انجام…' : 'اعمال'"></button>
-                            </fieldset>
-                        </form>
-                        <p class="bulk-feedback" x-show="bulkFeedback" x-text="bulkFeedback"></p>
-                    </section>
-                    <dialog class="paper compose-dialog" x-ref="bulkTrashDialog" aria-labelledby="bulk-trash-title">
-                        <h2 id="bulk-trash-title">انتقال به زباله‌دان</h2>
-                        <p x-text="number(checkedIds.length) + ' نامه به زباله‌دان منتقل شود؟'"></p>
-                        <form class="actions" @submit.prevent="$refs.bulkTrashDialog.close(); applyBulkAction()">
-                            <button class="secondary" type="button" autofocus @click="$refs.bulkTrashDialog.close()">بازگشت</button>
-                            <button class="primary" type="submit">انتقال به زباله‌دان</button>
-                        </form>
-                    </dialog>
                     <template x-for="group in groups" :key="group.key">
                         <section class="message-group" :aria-label="group.label">
                             <div class="group-title" :class="{'group-title-rule': splitInbox}"><h2 x-text="group.label"></h2><span x-show="group.messages.length" x-text="number(group.messages.length)"></span></div>
@@ -178,6 +181,7 @@
                                                 <span class="avatar" :class="message.color" x-text="message.initial" aria-hidden="true"></span>
                                                 <input type="checkbox" :aria-label="'انتخاب نامه: ' + message.subject" :checked="checkedIds.includes(message.id)"
                                                     :disabled="bulkBusy" @change="toggleBulkSelection(message.id, $event.target.checked)">
+                                                <span class="avatar message-check" x-html="icons.check" aria-hidden="true"></span>
                                             </label>
                                             <button type="button" class="message-open" :data-message="message.id" :aria-disabled="bulkBusy"
                                                 @click="if (!bulkBusy) openMessage(message)">

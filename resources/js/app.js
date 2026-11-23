@@ -22,6 +22,7 @@ const icons = {
     trash: icon('<path d="M3 6h18M9 6V3h6v3M5 6l1 14h12l1-14M10 10v6m4-6v6"/>'),
     chevron: icon('<path d="m6 9 6 6 6-6"/>'),
     back: icon('<path d="m13 6 6 6-6 6m6-6H5"/>'),
+    check: icon('<path d="m5 12 4 4L19 6"/>'),
 };
 
 const folders = {
@@ -148,9 +149,9 @@ Alpine.data('mailbox', () => ({
     selected: null,
     checkedIds: [],
     mailboxView: 0,
-    bulkAction: '',
+    bulkExpanded: true,
+    bulkPanel: '',
     bulkLabel: '',
-    bulkDestination: 'imbox',
     bulkBusy: false,
     bulkFeedback: '',
     screeningCount: 0,
@@ -484,18 +485,7 @@ Alpine.data('mailbox', () => ({
         return [...new Set(this.messages.filter(message => ids.has(message.id)).flatMap(message => message.labels ?? []))]
             .sort((first, second) => first.localeCompare(second, 'fa'));
     },
-    get bulkActionReady() {
-        switch (this.bulkAction) {
-            case 'label':
-                return Boolean(this.bulkLabel.trim());
-            case 'unlabel':
-                return this.bulkLabels.includes(this.bulkLabel);
-            default:
-                return Boolean(this.bulkAction);
-        }
-    },
     toggleBulkSelection(id, checked) {
-        if (!this.checkedIds.length && checked) this.bulkDestination = this.folderKey === 'imbox' ? 'feed' : 'imbox';
         this.checkedIds = checked ? [...this.checkedIds, id] : this.checkedIds.filter(checkedId => checkedId !== id);
         this.bulkFeedback = '';
         if (!this.checkedIds.length) this.clearBulkSelection();
@@ -503,7 +493,8 @@ Alpine.data('mailbox', () => ({
     clearBulkSelection(restoreFocus = false) {
         const id = this.checkedIds[0];
         this.checkedIds = [];
-        this.bulkAction = '';
+        this.bulkExpanded = true;
+        this.bulkPanel = '';
         this.bulkLabel = '';
         this.bulkFeedback = '';
         if (restoreFocus) this.focusMailboxRow(id);
@@ -514,24 +505,38 @@ Alpine.data('mailbox', () => ({
             (row ?? document.getElementById('main-content')).focus();
         });
     },
-    submitBulkAction() {
-        if (!this.bulkActionReady || this.bulkBusy || this.loading || !this.checkedIds.length) return;
-        if (this.bulkAction === 'trash') {
-            this.$refs.bulkTrashDialog.showModal();
+    openBulkPanel(panel) {
+        this.bulkPanel = panel;
+        this.bulkLabel = '';
+        this.$nextTick(() => {
+            (panel === 'label' ? this.$refs.bulkLabelInput : this.$refs.bulkBack)?.focus({preventScroll: true});
+        });
+    },
+    closeBulkPanel() {
+        const trigger = this.bulkPanel;
+        this.bulkPanel = '';
+        this.$nextTick(() => {
+            this.$refs.bulkBar.querySelector('[data-bulk-action="' + trigger + '"]')?.focus({preventScroll: true});
+        });
+    },
+    closeBulkMenu() {
+        if (this.bulkPanel && this.bulkExpanded) {
+            this.closeBulkPanel();
         } else {
-            this.applyBulkAction();
+            this.bulkExpanded = false;
+            this.$refs.bulkToggle.focus({preventScroll: true});
         }
     },
-    async applyBulkAction() {
-        if (!this.bulkActionReady || this.bulkBusy || this.loading || !this.checkedIds.length) return;
+    async applyBulkAction(action, value) {
+        if (this.bulkBusy || this.loading || !this.checkedIds.length) return;
+        if (action === 'label' && !value.trim()) return;
 
         const ids = [...this.checkedIds];
         const view = this.mailboxView;
-        const action = this.bulkAction;
         const flag = bulkFlags[action];
         const payload = flag ?? (action === 'move' || action === 'trash'
-            ? {action: 'move', destination: action === 'trash' ? 'trash' : this.bulkDestination}
-            : {action, label: action === 'label' ? this.bulkLabel.trim() : this.bulkLabel});
+            ? {action: 'move', destination: action === 'trash' ? 'trash' : value}
+            : {action, label: action === 'label' ? value.trim() : value});
         const failed = [];
         let failureMessage = '';
         this.bulkBusy = true;
@@ -572,7 +577,7 @@ Alpine.data('mailbox', () => ({
         } finally {
             this.bulkBusy = false;
             if (view === this.mailboxView && this.checkedIds.length && document.activeElement === document.body) {
-                this.$nextTick(() => this.$refs.bulkActionMenu?.focus());
+                this.$nextTick(() => this.$refs.bulkToggle?.focus({preventScroll: true}));
             }
         }
     },
