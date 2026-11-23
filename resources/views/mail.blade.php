@@ -107,7 +107,7 @@
                                     <span x-html="icons.chevron"></span>
                                 </button>
                                 <span class="bulk-progress" role="status" x-show="bulkBusy">در حال انجام…</span>
-                                <button class="nav-item" type="button" :disabled="bulkBusy" @click="clearBulkSelection(true)">لغو انتخاب</button>
+                                <button class="secondary bulk-clear" type="button" :disabled="bulkBusy" @click="clearBulkSelection(true)">لغو انتخاب</button>
                             </div>
                             <div id="bulk-actions" x-show="bulkExpanded">
                                 <fieldset class="bulk-actions" x-show="!bulkPanel" :disabled="bulkBusy || loading">
@@ -186,7 +186,7 @@
                                             <button type="button" class="message-open" :data-message="message.id" :aria-disabled="bulkBusy"
                                                 @click="if (!bulkBusy) openMessage(message)">
                                                 <span class="message-copy">
-                                                    <strong class="message-subject" dir="auto" x-text="message.subject"></strong>
+                                                    <strong class="message-subject" dir="rtl" x-text="message.subject"></strong>
                                                     <span class="message-summary"><bdi class="message-sender" x-text="message.sender"></bdi><span x-show="message.body"> · <bdi x-text="message.body"></bdi></span></span>
                                                 </span>
                                                 <time :datetime="message.receivedAt" x-text="message.time"></time>
@@ -216,7 +216,7 @@
                             <span class="avatar" :class="selected.color" x-text="selected.initial"></span>
                             <span class="avatar account-avatar">{{ $initial }}</span>
                         </div>
-                        <h1 tabindex="-1" id="message-heading" dir="auto" x-text="selected.subject"></h1>
+                        <h1 tabindex="-1" id="message-heading" dir="rtl" x-text="selected.subject"></h1>
                     </div>
                     <article class="paper reading">
                         <div class="message-meta">
@@ -347,7 +347,7 @@
                                         @endif
                                     </div>
                                 @endforeach
-                                <label class="field"><span>موضوع</span><input required dir="auto" maxlength="300" placeholder="موضوع نامه" x-model="draft.subject" @input="saveDraft"></label>
+                                <label class="field"><span>موضوع</span><input required dir="rtl" maxlength="300" placeholder="موضوع نامه" x-model="draft.subject" @input="saveDraft"></label>
                                 <div class="format-toolbar" role="group" aria-label="قالب‌بندی نامه" @mousedown.prevent="rememberSelection">
                                     <button type="button" aria-label="پررنگ" @click="format('bold')"><strong>B</strong></button>
                                     <button type="button" aria-label="مورب" @click="format('italic')"><em>I</em></button>

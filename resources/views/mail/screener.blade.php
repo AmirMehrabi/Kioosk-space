@@ -77,7 +77,7 @@
                                         <strong dir="auto" x-text="sender.name"></strong>
                                         <bdi dir="ltr" :title="sender.address" x-text="sender.address"></bdi>
                                     </span>
-                                    <span class="screening-subject" dir="auto" x-text="sender.messages[0].subject"></span>
+                                    <span class="screening-subject" dir="rtl" x-text="sender.messages[0].subject"></span>
                                     <span class="screening-excerpt" dir="auto" x-text="sender.messages[0].excerpt"></span>
                                 </span>
                                 <span class="screening-preview-indicator" aria-hidden="true">
@@ -91,7 +91,7 @@
                                 <template x-for="message in sender.messages" :key="message.id">
                                     <button class="secondary" type="button" :aria-pressed="screeningPreview?.id === message.id"
                                         @click="if (screeningPreview?.id !== message.id) previewSender(sender, message)">
-                                        <span dir="auto" x-text="message.subject"></span>
+                                        <span dir="rtl" x-text="message.subject"></span>
                                         <time :datetime="message.receivedAt" x-text="screeningTime(message.receivedAt)"></time>
                                     </button>
                                 </template>
