@@ -91,7 +91,7 @@
 
     <div class="workspace">
         <main class="content" id="main-content" tabindex="-1">
-            <div class="empty" x-show="loadError" role="alert"><p x-text="loadError"></p><button class="secondary" @click="compose ? openComposer() : load()">تلاش دوباره</button></div>
+            <div class="empty" x-show="loadError" role="alert"><p x-text="loadError"></p><button class="secondary" @click="compose ? openComposer() : reloadMailbox()">تلاش دوباره</button></div>
             @if ($account->screening_enabled)
                 @include('mail.screener')
             @endif
@@ -111,26 +111,91 @@
                             <span x-text="'بررسی ' + number(screeningCount) + ' فرستندهٔ جدید'"></span>
                         </a>
                     @endif
+                    <section class="bulk-bar" x-ref="bulkBar" x-show="checkedIds.length" aria-label="عملیات نامه‌های انتخاب‌شده">
+                        <div class="bulk-bar-heading">
+                            <strong role="status" x-text="number(checkedIds.length) + ' نامه انتخاب شده'"></strong>
+                            <button class="secondary" type="button" :disabled="bulkBusy" @click="clearBulkSelection(true)">لغو انتخاب</button>
+                        </div>
+                        <form @submit.prevent="submitBulkAction()">
+                            <fieldset class="bulk-controls" :disabled="bulkBusy || loading">
+                                <select aria-label="عملیات" x-model="bulkAction" x-ref="bulkActionMenu" @change="bulkLabel = ''">
+                                    <option value="">انتخاب عملیات</option>
+                                    <optgroup label="وضعیت خواندن">
+                                        <option value="read">نشان‌گذاری به‌عنوان خوانده‌شده</option>
+                                        <option value="unread">نشان‌گذاری به‌عنوان خوانده‌نشده</option>
+                                    </optgroup>
+                                    <optgroup label="دسته‌بندی">
+                                        <option value="later">افزودن به پاسخ بعداً</option>
+                                        <option value="unlater">حذف از پاسخ بعداً</option>
+                                        <option value="save">افزودن به کنارگذاشته‌ها</option>
+                                        <option value="unsave">حذف از کنارگذاشته‌ها</option>
+                                        <option value="label">افزودن برچسب</option>
+                                        <option value="unlabel" :disabled="!bulkLabels.length">حذف برچسب</option>
+                                    </optgroup>
+                                    <option value="move">انتقال به پوشه</option>
+                                    <option value="trash" :disabled="folderKey === 'trash' && !query.trim()">انتقال به زباله‌دان</option>
+                                </select>
+                                <template x-if="bulkAction === 'label'">
+                                    <input type="text" aria-label="برچسب جدید" placeholder="برچسب جدید" dir="auto" maxlength="25" required x-model="bulkLabel">
+                                </template>
+                                <template x-if="bulkAction === 'unlabel'">
+                                    <select aria-label="برچسب برای حذف" x-model="bulkLabel" required>
+                                        <option value="">انتخاب برچسب</option>
+                                        <template x-for="label in bulkLabels" :key="label">
+                                            <option :value="label" x-text="label" dir="auto"></option>
+                                        </template>
+                                    </select>
+                                </template>
+                                <template x-if="bulkAction === 'move'">
+                                    <select aria-label="پوشهٔ مقصد" x-model="bulkDestination">
+                                        <option value="imbox">نامه‌های مهم</option>
+                                        <option value="feed">خواندنی‌ها</option>
+                                        <option value="receipts">رسیدها</option>
+                                    </select>
+                                </template>
+                                <button class="primary" type="submit" :disabled="!bulkActionReady" x-text="bulkBusy ? 'در حال انجام…' : 'اعمال'"></button>
+                            </fieldset>
+                        </form>
+                        <p class="bulk-feedback" x-show="bulkFeedback" x-text="bulkFeedback"></p>
+                    </section>
+                    <dialog class="paper compose-dialog" x-ref="bulkTrashDialog" aria-labelledby="bulk-trash-title">
+                        <h2 id="bulk-trash-title">انتقال به زباله‌دان</h2>
+                        <p x-text="number(checkedIds.length) + ' نامه به زباله‌دان منتقل شود؟'"></p>
+                        <form class="actions" @submit.prevent="$refs.bulkTrashDialog.close(); applyBulkAction()">
+                            <button class="secondary" type="button" autofocus @click="$refs.bulkTrashDialog.close()">بازگشت</button>
+                            <button class="primary" type="submit">انتقال به زباله‌دان</button>
+                        </form>
+                    </dialog>
                     <template x-for="group in groups" :key="group.key">
                         <section class="message-group" :aria-label="group.label">
-                            <div class="group-title"><h2 x-text="group.label"></h2><span x-show="group.messages.length" x-text="number(group.messages.length)"></span></div>
+                            <div class="group-title" :class="{'group-title-rule': splitInbox}"><h2 x-text="group.label"></h2><span x-show="group.messages.length" x-text="number(group.messages.length)"></span></div>
                             <div class="mail-section-content">
                                 <x-mail-spinner x-show="loading && !pages[group.key]" />
                                 <div class="message-list" x-show="group.messages.length">
                                     <template x-for="message in group.messages" :key="message.id">
-                                        <button type="button" class="message-row" :data-message="message.id" :class="{unread: !message.read}" @click="openMessage(message)">
-                                            <span class="avatar" :class="message.color" x-text="message.initial"></span>
-                                            <span class="sender" x-text="message.sender"></span>
-                                            <span class="message-copy"><strong x-text="message.subject"></strong><span x-text="message.body"></span></span>
-                                            <time x-text="message.time"></time><i class="unread-dot" :class="{seen: message.read}" aria-hidden="true"></i><span class="sr-only" x-show="!message.read">خوانده‌نشده</span>
-                                        </button>
+                                        <div class="message-row" :class="{unread: !message.read, 'selection-mode': checkedIds.length, 'is-checked': checkedIds.includes(message.id)}">
+                                            <label class="message-select">
+                                                <span class="avatar" :class="message.color" x-text="message.initial" aria-hidden="true"></span>
+                                                <input type="checkbox" :aria-label="'انتخاب نامه: ' + message.subject" :checked="checkedIds.includes(message.id)"
+                                                    :disabled="bulkBusy" @change="toggleBulkSelection(message.id, $event.target.checked)">
+                                            </label>
+                                            <button type="button" class="message-open" :data-message="message.id" :aria-disabled="bulkBusy"
+                                                @click="if (!bulkBusy) openMessage(message)">
+                                                <span class="message-copy">
+                                                    <strong class="message-subject" dir="auto" x-text="message.subject"></strong>
+                                                    <span class="message-summary"><bdi class="message-sender" x-text="message.sender"></bdi><span x-show="message.body"> · <bdi x-text="message.body"></bdi></span></span>
+                                                </span>
+                                                <time :datetime="message.receivedAt" x-text="message.time"></time>
+                                                <i class="unread-dot" :class="{seen: message.read}" aria-hidden="true"></i><span class="sr-only" x-show="!message.read">خوانده‌نشده</span>
+                                            </button>
+                                        </div>
                                     </template>
                                 </div>
                                 <p class="inbox-empty" x-show="group.key !== 'all' && !group.messages.length && !loadError && (!loading || pages[group.key])"
                                     x-text="group.key === 'unread' ? 'نامه‌ی جدیدی ندارید' : 'هنوز نامه‌ای ندیده‌اید.'"></p>
                             </div>
                             <button class="secondary group-more" type="button" x-show="pages[group.key]?.more && !loadError"
-                                :disabled="loading" @click="load(true, group.key)">نامه‌های بیشتر</button>
+                                :disabled="loading || bulkBusy" @click="load(true, group.key)">نامه‌های بیشتر</button>
                         </section>
                     </template>
                     <div class="mail-placeholder folder-placeholder" x-show="!splitInbox && !visible.length">

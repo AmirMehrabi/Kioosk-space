@@ -39,6 +39,14 @@ const folders = {
 const emptyDraft = () => ({to: [], cc: [], bcc: [], subject: '', bodyHtml: '', attachments: [], files: [], reply: null, forward: null, quote: null});
 const number = new Intl.NumberFormat('fa-IR');
 const time = new Intl.DateTimeFormat('fa-IR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+const bulkFlags = {
+    read: {flag: 'read', value: true},
+    unread: {flag: 'read', value: false},
+    later: {flag: 'later', value: true},
+    unlater: {flag: 'later', value: false},
+    save: {flag: 'saved', value: true},
+    unsave: {flag: 'saved', value: false},
+};
 
 const mailLink = /^(?:https?:\/\/|mailto:)[^\s\x00-\x1f]+$/i;
 const clipboardTags = new Set([
@@ -138,6 +146,13 @@ Alpine.data('mailbox', () => ({
     folderKey: 'imbox',
     query: '',
     selected: null,
+    checkedIds: [],
+    mailboxView: 0,
+    bulkAction: '',
+    bulkLabel: '',
+    bulkDestination: 'imbox',
+    bulkBusy: false,
+    bulkFeedback: '',
     screeningCount: 0,
     screeningSenders: [],
     screeningHistory: [],
@@ -197,7 +212,7 @@ Alpine.data('mailbox', () => ({
                 if (this.screeningView) {
                     if (!this.screeningPreview) this.load();
                 } else {
-                    if (this.messages.length <= 35) this.load();
+                    if (!this.checkedIds.length && !this.bulkBusy && !this.loadError && this.messages.length <= 35) this.load();
                     this.loadScreeningCount();
                 }
             }, 30000);
@@ -246,7 +261,10 @@ Alpine.data('mailbox', () => ({
     get splitInbox() {
         return !this.compose && this.folderKey === 'imbox' && !this.query.trim();
     },
-    async load(append = false, section = 'all') {
+    reloadMailbox() {
+        return this.load(false, 'all', this.pages);
+    },
+    async load(append = false, section = 'all', previousPages = {}) {
         if (this.screeningView) return this.loadScreening();
         const version = ++this.loadVersion;
         const minimumDisplay = !append && !Object.keys(this.pages).length ? spinnerVisible() : null;
@@ -257,19 +275,28 @@ Alpine.data('mailbox', () => ({
             const pages = append ? {...this.pages} : {};
             const messages = append ? [...this.messages] : [];
             for (const key of sections) {
-                const position = append ? pages[key]?.position ?? 0 : 0;
-                const params = new URLSearchParams({folder: this.folderKey, q: this.query.trim(), position});
-                if (key !== 'all') params.set('section', key);
-                const data = await mailRequest('data?' + params);
-                if (version !== this.loadVersion) return false;
+                let position = append ? pages[key]?.position ?? 0 : 0;
+                const previousPosition = previousPages[key]?.position ?? 0;
+                do {
+                    const params = new URLSearchParams({folder: this.folderKey, q: this.query.trim(), position});
+                    if (key !== 'all') params.set('section', key);
+                    const data = await mailRequest('data?' + params);
+                    if (version !== this.loadVersion) return false;
 
-                messages.push(...data.messages.map(message => ({...message, time: time.format(new Date(message.receivedAt))})));
-                pages[key] = {more: data.more, position: position + data.messages.length};
+                    messages.push(...data.messages.map(message => ({...message, time: time.format(new Date(message.receivedAt))})));
+                    position += data.messages.length;
+                    pages[key] = {more: data.more && position <= 100000 && data.messages.length > 0, position};
+                } while (pages[key].more && position < previousPosition);
             }
             if (minimumDisplay) await minimumDisplay;
             if (version !== this.loadVersion) return false;
             this.messages = [...new Map(messages.map(row => [row.id, row])).values()];
             this.pages = pages;
+            if (this.checkedIds.length) {
+                const visibleIds = new Set(this.messages.map(message => message.id));
+                this.checkedIds = this.checkedIds.filter(id => visibleIds.has(id));
+                if (!this.checkedIds.length) this.clearBulkSelection();
+            }
             return true;
         } catch (error) {
             if (minimumDisplay) await minimumDisplay;
@@ -281,8 +308,18 @@ Alpine.data('mailbox', () => ({
     },
     search() {
         this.selected = null;
-        clearTimeout(this.searchTimer);
+        this.resetMailboxView();
+        this.loading = true;
         this.searchTimer = setTimeout(() => this.load(), 250);
+    },
+    resetMailboxView() {
+        this.mailboxView++;
+        this.loadVersion++;
+        clearTimeout(this.searchTimer);
+        this.clearBulkSelection();
+        this.messages = [];
+        this.pages = {};
+        this.loadError = '';
     },
     toggleHeaderMenu(menu) {
         this.headerMenu = this.headerMenu === menu ? null : menu;
@@ -320,6 +357,7 @@ Alpine.data('mailbox', () => ({
         this.$nextTick(() => document.getElementById('main-content').focus());
     },
     syncFolder() {
+        this.resetMailboxView();
         const key = location.hash.slice(1);
         this.folderKey = Object.hasOwn(folders, key) ? key : 'imbox';
         if (this.screeningView && !this.screeningEnabled) this.folderKey = 'imbox';
@@ -441,7 +479,105 @@ Alpine.data('mailbox', () => ({
         }
         return this.visible.length ? [{ key: 'all', label: 'نامه‌ها', messages: this.visible }] : [];
     },
+    get bulkLabels() {
+        const ids = new Set(this.checkedIds);
+        return [...new Set(this.messages.filter(message => ids.has(message.id)).flatMap(message => message.labels ?? []))]
+            .sort((first, second) => first.localeCompare(second, 'fa'));
+    },
+    get bulkActionReady() {
+        switch (this.bulkAction) {
+            case 'label':
+                return Boolean(this.bulkLabel.trim());
+            case 'unlabel':
+                return this.bulkLabels.includes(this.bulkLabel);
+            default:
+                return Boolean(this.bulkAction);
+        }
+    },
+    toggleBulkSelection(id, checked) {
+        if (!this.checkedIds.length && checked) this.bulkDestination = this.folderKey === 'imbox' ? 'feed' : 'imbox';
+        this.checkedIds = checked ? [...this.checkedIds, id] : this.checkedIds.filter(checkedId => checkedId !== id);
+        this.bulkFeedback = '';
+        if (!this.checkedIds.length) this.clearBulkSelection();
+    },
+    clearBulkSelection(restoreFocus = false) {
+        const id = this.checkedIds[0];
+        this.checkedIds = [];
+        this.bulkAction = '';
+        this.bulkLabel = '';
+        this.bulkFeedback = '';
+        if (restoreFocus) this.focusMailboxRow(id);
+    },
+    focusMailboxRow(id) {
+        this.$nextTick(() => {
+            const row = id === undefined ? null : document.querySelector('[data-message="' + CSS.escape(id) + '"]');
+            (row ?? document.getElementById('main-content')).focus();
+        });
+    },
+    submitBulkAction() {
+        if (!this.bulkActionReady || this.bulkBusy || this.loading || !this.checkedIds.length) return;
+        if (this.bulkAction === 'trash') {
+            this.$refs.bulkTrashDialog.showModal();
+        } else {
+            this.applyBulkAction();
+        }
+    },
+    async applyBulkAction() {
+        if (!this.bulkActionReady || this.bulkBusy || this.loading || !this.checkedIds.length) return;
+
+        const ids = [...this.checkedIds];
+        const view = this.mailboxView;
+        const action = this.bulkAction;
+        const flag = bulkFlags[action];
+        const payload = flag ?? (action === 'move' || action === 'trash'
+            ? {action: 'move', destination: action === 'trash' ? 'trash' : this.bulkDestination}
+            : {action, label: action === 'label' ? this.bulkLabel.trim() : this.bulkLabel});
+        const failed = [];
+        let failureMessage = '';
+        this.bulkBusy = true;
+        this.bulkFeedback = '';
+
+        try {
+            for (let offset = 0; offset < ids.length; offset += 4) {
+                const batch = ids.slice(offset, offset + 4);
+                const results = await Promise.allSettled(batch.map(id => mailRequest(
+                    'message/' + encodeURIComponent(id) + (flag ? '' : '/organize'),
+                    flag ? 'PATCH' : 'POST',
+                    payload,
+                )));
+                results.forEach((result, index) => {
+                    if (result.status === 'rejected') {
+                        failed.push(batch[index]);
+                        failureMessage ||= result.reason.status ? result.reason.message : 'ارتباط با صندوق برقرار نشد.';
+                    }
+                });
+            }
+            if (view !== this.mailboxView) return;
+
+            const succeeded = ids.length - failed.length;
+            const feedback = this.number(succeeded) + ' نامه تغییر کرد، ' + this.number(failed.length) + ' ناموفق.'
+                + (failureMessage ? ' ' + failureMessage : '');
+            this.checkedIds = failed;
+            this.bulkFeedback = failed.length ? feedback : '';
+            this.notify(feedback);
+            if (succeeded) await this.reloadMailbox();
+            if (view !== this.mailboxView) return;
+
+            if (!this.checkedIds.length) {
+                this.clearBulkSelection();
+                if (document.activeElement === document.body || this.$refs.bulkBar?.contains(document.activeElement)) {
+                    this.focusMailboxRow(ids[0]);
+                }
+            }
+        } finally {
+            this.bulkBusy = false;
+            if (view === this.mailboxView && this.checkedIds.length && document.activeElement === document.body) {
+                this.$nextTick(() => this.$refs.bulkActionMenu?.focus());
+            }
+        }
+    },
     async openMessage(message) {
+        this.clearBulkSelection();
         this.selected = {...message, loading: true};
         const minimumDisplay = spinnerVisible();
         this.$nextTick(() => document.getElementById('message-heading')?.focus());
@@ -460,10 +596,7 @@ Alpine.data('mailbox', () => ({
         const id = this.selected.id;
         this.closeHeaderMenu();
         this.selected = null;
-        this.$nextTick(() => {
-            const row = document.querySelector('[data-message="' + CSS.escape(id) + '"]');
-            (row ?? document.getElementById('main-content')).focus();
-        });
+        this.focusMailboxRow(id);
     },
     async setFlag(flag, value) {
         const id = this.selected.id;
