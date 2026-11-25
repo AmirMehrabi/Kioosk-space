@@ -9,9 +9,9 @@
     <meta property="og:title" content="کیوسک | نامه‌های مهم، دم دست">
     <meta property="og:description" content="کیوسک، صندوق نامهٔ فارسی برای خواندن، مرتب کردن و پاسخ دادن به ایمیل‌ها.">
     <meta property="og:url" content="{{ route('landing') }}">
-    <meta property="og:image" content="{{ asset('kioosk-logos/kioosk-logo-bilingual-blue-badge.png') }}">
-    <meta property="og:image:width" content="2172">
-    <meta property="og:image:height" content="724">
+    <meta property="og:image" content="{{ asset('kioosk-logos/kioosk-logo-bilingual-blue-badge-1200.png') }}">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="400">
     <meta property="og:image:alt" content="کیوسک | Kioosk">
     <title>کیوسک | نامه‌های مهم، دم دست</title>
     <x-kioosk-icons />
@@ -21,7 +21,7 @@
     <a class="skip-link" href="#landing-content">رفتن به محتوای اصلی</a>
     <header class="landing-header">
         <a class="landing-brand" href="{{ route('landing', absolute: false) }}">
-            <img class="landing-logo" src="{{ asset('kioosk-logos/kioosk-logo-horizontal-persian.png') }}"
+            <img class="landing-logo" src="{{ asset('kioosk-logos/kioosk-logo-horizontal-persian.webp') }}"
                 width="1050" height="356" alt="کیوسک">
         </a>
         <nav aria-label="صفحهٔ اصلی">
@@ -55,7 +55,7 @@
                     <div class="landing-preview" aria-hidden="true">
                         <div class="preview-header">
                             <span>صندوق نامه‌ها</span>
-                            <img class="preview-wordmark" src="{{ asset('kioosk-logos/kioosk-wordmark-english.png') }}" width="2172" height="724" alt="">
+                            <img class="preview-wordmark" src="{{ asset('kioosk-logos/kioosk-wordmark-english.webp') }}" width="2172" height="724" alt="">
                             <span class="preview-user">آ</span>
                         </div>
                         <div class="preview-body">
@@ -168,7 +168,7 @@
 
     <footer class="landing-footer landing-wrap">
         <a class="landing-footer-brand" href="{{ route('landing', absolute: false) }}">
-            <img src="{{ asset('kioosk-logos/kioosk-logo-stacked-bilingual.png') }}"
+            <img src="{{ asset('kioosk-logos/kioosk-logo-stacked-bilingual.webp') }}"
                 width="1254" height="1254" alt="کیوسک | Kioosk" loading="lazy">
         </a>
         <a href="{{ route('imbox', absolute: false) }}">صندوق نامه‌ها</a>
