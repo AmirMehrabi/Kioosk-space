@@ -15,14 +15,17 @@
     <meta property="og:image:alt" content="کیوسک | Kioosk">
     <title>کیوسک | نامه‌های مهم، دم دست</title>
     <x-kioosk-icons />
-    @vite(['resources/css/app.css', 'resources/css/landing.css', 'resources/js/app.js'])
+    @vite(['resources/css/app.css', 'resources/css/landing.css', 'resources/js/landing.js'])
 </head>
 <body class="landing">
     <a class="skip-link" href="#landing-content">رفتن به محتوای اصلی</a>
     <header class="landing-header">
         <a class="landing-brand" href="{{ route('landing', absolute: false) }}">
-            <img class="landing-logo" src="{{ asset('kioosk-logos/kioosk-logo-horizontal-persian.webp') }}"
-                width="1050" height="356" alt="کیوسک">
+            <img class="landing-logo"
+                src="{{ asset('kioosk-logos/kioosk-logo-horizontal-persian-300.webp') }}"
+                srcset="{{ asset('kioosk-logos/kioosk-logo-horizontal-persian-300.webp') }} 300w, {{ asset('kioosk-logos/kioosk-logo-horizontal-persian-600.webp') }} 600w"
+                sizes="(max-width: 666px) 120px, (max-width: 833px) 18vw, 150px"
+                width="300" height="102" alt="کیوسک" fetchpriority="high">
         </a>
         <nav aria-label="صفحهٔ اصلی">
             <a class="landing-nav-link" href="#folders">صندوق چطور کار می‌کند؟</a>
@@ -35,7 +38,7 @@
     </header>
 
     <main id="landing-content" tabindex="-1">
-        <section class="landing-hero landing-wrap" x-data aria-labelledby="landing-title">
+        <section class="landing-hero landing-wrap" aria-labelledby="landing-title">
             <div class="landing-hero-grid">
                 <div class="landing-intro">
                     <h1 id="landing-title">همهٔ نامه‌ها <em>فوری نیستند.</em></h1>
@@ -47,7 +50,7 @@
                             <a class="primary landing-button" href="{{ route('register', absolute: false) }}">نشانی خود را بسازید</a>
                         @endauth
                         <button type="button" class="secondary landing-button" aria-haspopup="dialog"
-                            x-cloak @click="$refs.preview.showModal()">پیش‌نمایش صندوق</button>
+                            aria-controls="preview-dialog" data-preview-open>پیش‌نمایش صندوق</button>
                     </div>
                     <small>نشانی شخصی شما در <bdi dir="ltr">@kioosk.space</bdi></small>
                 </div>
@@ -55,7 +58,10 @@
                     <div class="landing-preview" aria-hidden="true">
                         <div class="preview-header">
                             <span>صندوق نامه‌ها</span>
-                            <img class="preview-wordmark" src="{{ asset('kioosk-logos/kioosk-wordmark-english.webp') }}" width="2172" height="724" alt="">
+                            <img class="preview-wordmark"
+                                src="{{ asset('kioosk-logos/kioosk-wordmark-english-192.webp') }}"
+                                srcset="{{ asset('kioosk-logos/kioosk-wordmark-english-192.webp') }} 192w, {{ asset('kioosk-logos/kioosk-wordmark-english-384.webp') }} 384w"
+                                sizes="96px" width="192" height="64" alt="">
                             <span class="preview-user">آ</span>
                         </div>
                         <div class="preview-body">
@@ -68,7 +74,7 @@
                 </div>
             </div>
 
-            <dialog class="landing-dialog" x-ref="preview" aria-labelledby="preview-heading">
+            <dialog class="landing-dialog" id="preview-dialog" aria-labelledby="preview-heading">
                 <div class="dialog-header">
                     <h2 id="preview-heading">پیش‌نمایش صندوق کیوسک</h2>
                     <form method="dialog"><button type="submit" class="secondary landing-button" autofocus>بستن</button></form>
